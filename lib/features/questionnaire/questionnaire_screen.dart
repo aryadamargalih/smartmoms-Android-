@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/common_widgets.dart';
 import 'questionnaire_model.dart';
+import 'package:provider/provider.dart';
+import '../../core/providers/questionnaire_provider.dart' as qp;
 
 class QuestionnaireScreen extends StatefulWidget {
   const QuestionnaireScreen({super.key});
@@ -13,12 +15,15 @@ class QuestionnaireScreen extends StatefulWidget {
 class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
   // Index kuesioner yang sedang aktif
   int _activeQuestionnaire = 0;
+
   // Index pertanyaan yang sedang aktif
   int _currentQuestion = 0;
   // Simpan jawaban: {questionId: value}
   final Map<String, int> _answers = {};
   // State halaman: 'list', 'quiz', 'result'
   String _page = 'list';
+
+  qp.QuestionnaireResult? _result;
 
   QuestionnaireModel get _currentQuestionnaire =>
       dummyQuestionnaires[_activeQuestionnaire];
@@ -56,21 +61,51 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
     return AppColors.danger;
   }
 
-  void _startQuestionnaire(int index) {
+  void _startQuestionnaire(int index, int questionnaireId) async {
     setState(() {
       _activeQuestionnaire = index;
       _currentQuestion = 0;
       _answers.clear();
-      _page = 'quiz';
+      _page = 'loading';
     });
+
+    await context
+        .read<qp.QuestionnaireProvider>()
+        .fetchQuestions(questionnaireId);
+
+    setState(() => _page = 'quiz');
   }
 
-  void _next() {
-    if (_answers[_question.id] == null) return; // wajib jawab dulu
-    if (_currentQuestion < _totalQuestions - 1) {
+  void _next() async {
+    final provider = context.read<qp.QuestionnaireProvider>();
+    final questions = provider.activeQuestionnaire?.questions ?? [];
+
+    if (_answers[questions[_currentQuestion].id.toString()] == null) return;
+
+    if (_currentQuestion < questions.length - 1) {
       setState(() => _currentQuestion++);
     } else {
-      setState(() => _page = 'result');
+      // Submit ke API
+      setState(() => _page = 'loading');
+      final result = await provider.submitAnswers(
+        questionnaireId: provider.activeQuestionnaire!.id,
+        answers: _answers,
+      );
+
+      if (result != null) {
+        _result = result;
+        setState(() => _page = 'result');
+      } else {
+        setState(() => _page = 'quiz');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Gagal submit, coba lagi'),
+              backgroundColor: AppColors.danger,
+            ),
+          );
+        }
+      }
     }
   }
 
@@ -84,14 +119,32 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_page == 'loading') return _buildLoading();
     if (_page == 'quiz') return _buildQuiz(context);
     if (_page == 'result') return _buildResult(context);
     return _buildList(context);
   }
 
+  Widget _buildLoading() {
+    return const Scaffold(
+      body: Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
+      ),
+    );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<qp.QuestionnaireProvider>().fetchQuestionnaires();
+    });
+  }
+
   // ─── Halaman List Kuesioner ───────────────────────────────────────────────
   Widget _buildList(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final provider = context.watch<qp.QuestionnaireProvider>();
 
     return Scaffold(
       appBar: AppBar(
@@ -102,83 +155,102 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Banner info
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [AppColors.primary, AppColors.primaryLight],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
+      body: provider.isLoading
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.primary))
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                  // Banner tetap sama
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [AppColors.primary, AppColors.primaryLight],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
                       children: [
-                        const Text(
-                          'Cek Kesehatan Kamu 📋',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w700,
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Cek Kesehatan Kamu 📋',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Jawab kuesioner untuk mendapat rekomendasi kesehatan yang personal',
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.85),
+                                  fontSize: 13,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Jawab kuesioner untuk mendapat rekomendasi kesehatan yang personal',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.85),
-                            fontSize: 13,
-                            height: 1.4,
-                          ),
-                        ),
+                        const SizedBox(width: 12),
+                        const Icon(Icons.assignment_outlined,
+                            color: Colors.white, size: 40),
                       ],
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  const Icon(Icons.assignment_outlined,
-                      color: Colors.white, size: 40),
+                  const SizedBox(height: 24),
+
+                  const SectionHeader(title: 'Pilih Kuesioner'),
+                  const SizedBox(height: 12),
+
+                  // List dari API
+                  ...provider.questionnaires.asMap().entries.map((e) {
+                    final i = e.key;
+                    final q = e.value;
+                    return _QuestionnaireCard(
+                      // Sesuaikan dengan model baru dari API
+                      questionnaire: QuestionnaireModel(
+                        id: q.id.toString(),
+                        category: q.title,
+                        description: q.description,
+                        questionsCount: q.questionsCount,
+                        questions: [], // kosong dulu, diload saat tap
+                      ),
+                      isDark: isDark,
+                      onTap: () => _startQuestionnaire(i, q.id),
+                    );
+                  }),
                 ],
               ),
             ),
-            const SizedBox(height: 24),
-
-            const SectionHeader(title: 'Pilih Kuesioner'),
-            const SizedBox(height: 12),
-
-            ...dummyQuestionnaires.asMap().entries.map((e) {
-              final i = e.key;
-              final q = e.value;
-              return _QuestionnaireCard(
-                questionnaire: q,
-                isDark: isDark,
-                onTap: () => _startQuestionnaire(i),
-              );
-            }),
-          ],
-        ),
-      ),
     );
   }
 
   // ─── Halaman Quiz ─────────────────────────────────────────────────────────
   Widget _buildQuiz(BuildContext context) {
+    final provider = context.watch<qp.QuestionnaireProvider>();
+    final questions = provider.activeQuestionnaire?.questions ?? [];
+
+    if (questions.isEmpty) return _buildLoading();
+
+    final question = questions[_currentQuestion];
+    final selectedAnswer = _answers[question.id.toString()];
+    final totalQuestions = questions.length;
+    final progress = (_currentQuestion + 1) / totalQuestions;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final selectedAnswer = _answers[_question.id];
 
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          _currentQuestionnaire.category,
+          provider.activeQuestionnaire?.title ?? '',
           style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
         ),
         leading: IconButton(
@@ -198,7 +270,7 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Pertanyaan ${_currentQuestion + 1} dari $_totalQuestions',
+                      'Pertanyaan ${_currentQuestion + 1} dari $totalQuestions',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
@@ -208,7 +280,7 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
                       ),
                     ),
                     Text(
-                      '${(_progress * 100).toInt()}%',
+                      '${(progress * 100).toInt()}%',
                       style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
@@ -221,7 +293,7 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
                 ClipRRect(
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
-                    value: _progress,
+                    value: progress,
                     backgroundColor:
                         isDark ? AppColors.darkDivider : AppColors.lightDivider,
                     color: AppColors.primary,
@@ -284,7 +356,7 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            _question.question,
+                            question.question,
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
@@ -299,7 +371,6 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
                     ),
                     const SizedBox(height: 24),
 
-                    // Pilihan jawaban
                     Text(
                       'Pilih jawaban yang paling sesuai:',
                       style: TextStyle(
@@ -312,11 +383,12 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
                     ),
                     const SizedBox(height: 12),
 
-                    ..._question.options.map((option) {
+                    // Pilihan dari API
+                    ...question.options.map((option) {
                       final isSelected = selectedAnswer == option.value;
                       return GestureDetector(
-                        onTap: () => setState(
-                            () => _answers[_question.id] = option.value),
+                        onTap: () => setState(() =>
+                            _answers[question.id.toString()] = option.value),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
                           margin: const EdgeInsets.only(bottom: 10),
@@ -340,7 +412,6 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
                           ),
                           child: Row(
                             children: [
-                              // Nilai 1-5
                               Container(
                                 width: 36,
                                 height: 36,
@@ -437,7 +508,7 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
                 Expanded(
                   flex: 2,
                   child: GradientButton(
-                    text: _currentQuestion == _totalQuestions - 1
+                    text: _currentQuestion == totalQuestions - 1
                         ? 'Lihat Hasil'
                         : 'Selanjutnya',
                     onPressed: selectedAnswer != null ? _next : () {},
@@ -453,8 +524,18 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
 
   // ─── Halaman Hasil ────────────────────────────────────────────────────────
   Widget _buildResult(BuildContext context) {
+    if (_result == null) return _buildLoading();
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final percent = _totalScore / _maxScore;
+    final percent = _result!.percentage;
+    final scoreColor = percent >= 0.8
+        ? AppColors.success
+        : percent >= 0.6
+            ? AppColors.primary
+            : percent >= 0.4
+                ? AppColors.warning
+                : AppColors.danger;
+    final scoreCategory = _result!.scoreCategory;
 
     return Scaffold(
       appBar: AppBar(
@@ -474,7 +555,7 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
                 color: isDark ? AppColors.darkCard : AppColors.lightCard,
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(
-                  color: _scoreColor.withOpacity(0.3),
+                  color: scoreColor.withOpacity(0.3),
                   width: 1.5,
                 ),
               ),
@@ -492,16 +573,16 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    _scoreCategory,
+                    scoreCategory,
                     style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.w800,
-                      color: _scoreColor,
+                      color: scoreColor,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Skor kamu: $_totalScore / $_maxScore',
+                    'Skor kamu: ${_result!.totalScore} / ${_result!.maxScore}',
                     style: TextStyle(
                       fontSize: 15,
                       color: isDark
@@ -510,7 +591,6 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  // Progress circle simulasi
                   ClipRRect(
                     borderRadius: BorderRadius.circular(8),
                     child: LinearProgressIndicator(
@@ -518,7 +598,7 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
                       backgroundColor: isDark
                           ? AppColors.darkDivider
                           : AppColors.lightDivider,
-                      color: _scoreColor,
+                      color: scoreColor,
                       minHeight: 10,
                     ),
                   ),
@@ -528,154 +608,19 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color: _scoreColor,
+                      color: scoreColor,
                     ),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 20),
-
-            // Ringkasan per jawaban
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: isDark ? AppColors.darkCard : AppColors.lightCard,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Ringkasan Jawaban',
-                      style:
-                          TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 14),
-                  ..._currentQuestionnaire.questions.asMap().entries.map((e) {
-                    final i = e.key;
-                    final q = e.value;
-                    final answer = _answers[q.id] ?? 0;
-                    final option = q.options.firstWhere(
-                        (o) => o.value == answer,
-                        orElse: () => q.options.first);
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            width: 24,
-                            height: 24,
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Center(
-                              child: Text('${i + 1}',
-                                  style: const TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.primary)),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(q.question,
-                                    style: TextStyle(
-                                        fontSize: 12,
-                                        color: isDark
-                                            ? AppColors.darkTextSecondary
-                                            : AppColors.lightTextSecondary,
-                                        height: 1.4)),
-                                const SizedBox(height: 4),
-                                Row(
-                                  children: [
-                                    Text(option.emoji,
-                                        style: const TextStyle(fontSize: 14)),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      '${option.value} - ${option.label}',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: _getAnswerColor(option.value),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // Rekomendasi
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: isDark
-                      ? [const Color(0xFF1A1035), const Color(0xFF0F1A35)]
-                      : [const Color(0xFFF3E8FF), const Color(0xFFE8F0FF)],
-                ),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                    color: AppColors.accent.withOpacity(0.3), width: 1.5),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                          colors: [AppColors.accent, AppColors.accentLight]),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.auto_awesome_rounded,
-                        color: Colors.white, size: 20),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Rekomendasi AI',
-                            style: TextStyle(
-                                fontSize: 14, fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 4),
-                        Text(
-                          _getRecommendation(),
-                          style: TextStyle(
-                            fontSize: 13,
-                            height: 1.5,
-                            color: isDark
-                                ? AppColors.darkTextSecondary
-                                : AppColors.lightTextSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
 
             // Tombol aksi
             GradientButton(
               text: 'Tanya AI Lebih Lanjut',
-              onPressed: () {
-                Navigator.pushReplacementNamed(context, '/ai-chat');
-              },
+              onPressed: () =>
+                  Navigator.pushReplacementNamed(context, '/ai-chat'),
             ),
             const SizedBox(height: 12),
             SizedBox(
@@ -783,7 +728,7 @@ class _QuestionnaireCard extends StatelessWidget {
                       )),
                   const SizedBox(height: 6),
                   Text(
-                    '${questionnaire.questions.length} pertanyaan',
+                    '${questionnaire.questionsCount} pertanyaan',
                     style: const TextStyle(
                       fontSize: 12,
                       color: AppColors.primary,

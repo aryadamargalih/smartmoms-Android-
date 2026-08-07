@@ -9,6 +9,8 @@ import '../mood/mood_tracker.dart';
 import 'package:provider/provider.dart';
 import '../../core/providers/health_provider.dart';
 import '../../core/providers/auth_provider.dart';
+import '../../core/providers/sleep_provider.dart';
+import '../../core/providers/mood_provider.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -21,8 +23,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _bpmPeriod = 0;
   int _bpPeriod = 0;
   int _activityPeriod = 0;
-  SleepRecord? _todaySleep;
-  MoodRecord? _todayMood;
   bool _moodReminderShown = false;
 
   final List<List<FlSpot>> _bpmData = [
@@ -48,7 +48,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     [FlSpot(0, 82), FlSpot(1, 79), FlSpot(2, 84), FlSpot(3, 81)],
   ];
 
-  // data BPM
+  // getter BPM
   List<FlSpot> get _bpmSpots {
     final data = context.read<HealthProvider>().chartData;
     if (data.isEmpty) return _bpmData[_bpmPeriod]; // fallback dummy
@@ -58,6 +58,53 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .where((e) => e.value.bpm != null)
         .map((e) => FlSpot(e.key.toDouble(), e.value.bpm!.toDouble()))
         .toList();
+  }
+
+  // getter TD Sistolik
+  List<FlSpot> get _systolicSpots {
+    final data = context.read<HealthProvider>().chartData;
+    if (data.isEmpty) return _bpSystolicData[_bpPeriod];
+    return data
+        .asMap()
+        .entries
+        .where((e) => e.value.systolic != null)
+        .map((e) => FlSpot(e.key.toDouble(), e.value.systolic!.toDouble()))
+        .toList();
+  }
+
+// getter TD Diastolik
+  List<FlSpot> get _diastolicSpots {
+    final data = context.read<HealthProvider>().chartData;
+    if (data.isEmpty) return _bpDiastolicData[_bpPeriod];
+    return data
+        .asMap()
+        .entries
+        .where((e) => e.value.diastolic != null)
+        .map((e) => FlSpot(e.key.toDouble(), e.value.diastolic!.toDouble()))
+        .toList();
+  }
+
+// getter Aktivitas
+  List<BarChartGroupData> get _activitySpots {
+    final data = context.read<HealthProvider>().chartData;
+    if (data.isEmpty) return _activityData[_activityPeriod];
+    return data.asMap().entries.map((e) {
+      return BarChartGroupData(
+        x: e.key,
+        barRods: [
+          BarChartRodData(
+            toY: e.value.steps?.toDouble() ?? 0,
+            gradient: const LinearGradient(
+              begin: Alignment.bottomCenter,
+              end: Alignment.topCenter,
+              colors: [AppColors.activityColor, AppColors.activityColorLight],
+            ),
+            width: 14,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+          ),
+        ],
+      );
+    }).toList();
   }
 
   // Dummy data Blood Pressure (Systolic & Diastolic)
@@ -114,17 +161,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _buildActivityData();
-    _todaySleep = dummySleepRecords.first;
-    _todayMood = dummyMoodRecords.first;
 
-    // Fetch data dari API
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       context.read<HealthProvider>().refreshAll();
-    });
+      context.read<SleepProvider>().fetchToday();
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && !_moodReminderShown && _todayMood == null) {
-        _showMoodReminder();
+      // Tunggu mood selesai fetch dulu baru cek reminder
+      await context.read<MoodProvider>().fetchToday();
+
+      if (mounted && !_moodReminderShown) {
+        final moodProvider = context.read<MoodProvider>();
+        if (moodProvider.todayMood == null) {
+          _showMoodReminder();
+          setState(() => _moodReminderShown = true);
+        }
       }
     });
   }
@@ -150,15 +200,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => _MoodInputSheet(
-        onSave: (mood, note) {
-          setState(() {
-            _todayMood = MoodRecord(
-              id: DateTime.now().toString(),
-              date: DateTime.now(),
-              mood: mood,
-              note: note,
-            );
-          });
+        onSave: (mood, note) async {
+          await context.read<MoodProvider>().submitMood(
+                mood: mood,
+                note: note,
+              );
         },
       ),
     );
@@ -206,17 +252,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => _SleepInputSheet(
-        onSave: (bed, wake, quality, disturbances) {
-          setState(() {
-            _todaySleep = SleepRecord(
-              id: DateTime.now().toString(),
-              bedTime: bed,
-              wakeTime: wake,
-              date: DateTime.now(),
-              quality: quality,
-              disturbances: disturbances,
-            );
-          });
+        onSave: (bed, wake, quality, disturbances) async {
+          await context.read<SleepProvider>().submitSleep(
+                bedTime: bed,
+                wakeTime: wake,
+                quality: quality,
+                disturbances: disturbances,
+              );
         },
       ),
     );
@@ -228,6 +270,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final periods = ['Hari', 'Minggu', 'Bulan'];
     final health = context.watch<HealthProvider>();
     final user = context.watch<AuthProvider>().user;
+    final sleep = context.watch<SleepProvider>();
+    final mood = context.watch<MoodProvider>();
 
     return Scaffold(
       body: SafeArea(
@@ -350,7 +394,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 sliver: SliverList(
                   delegate: SliverChildListDelegate([
                     // Pregnancy week banner
-                    _PregnancyBanner(isDark: isDark),
+                    _PregnancyBanner(
+                      isDark: isDark,
+                      nifasDay: user?.nifasDay ?? 0,
+                    ),
                     const SizedBox(height: 24),
 
                     // Quick stats
@@ -406,13 +453,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     const SizedBox(height: 12),
                     _SleepCard(
-                      sleep: _todaySleep,
+                      sleep: sleep.todaySleep,
                       isDark: isDark,
                       onInput: () => _showSleepInput(context),
                     ),
                     const SizedBox(height: 12),
                     _MoodCard(
-                      mood: _todayMood,
+                      mood: mood.todayMood,
                       isDark: isDark,
                       onInput: () => _showMoodInput(context),
                     ),
@@ -426,7 +473,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       iconColor: AppColors.bpmColor,
                       period: _bpmPeriod,
                       periods: periods,
-                      onPeriodChanged: (i) => setState(() => _bpmPeriod = i),
+                      onPeriodChanged: (i) {
+                        setState(() => _bpmPeriod = i);
+                        final periods = ['day', 'week', 'month'];
+                        context
+                            .read<HealthProvider>()
+                            .fetchChartData(period: periods[i]);
+                      },
                       chart: _BpmLineChart(
                         spots: _bpmSpots,
                         isDark: isDark,
@@ -442,10 +495,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       iconColor: AppColors.primary,
                       period: _bpPeriod,
                       periods: periods,
-                      onPeriodChanged: (i) => setState(() => _bpPeriod = i),
+                      onPeriodChanged: (i) {
+                        setState(() => _bpPeriod = i);
+                        final periods = ['day', 'week', 'month'];
+                        context
+                            .read<HealthProvider>()
+                            .fetchChartData(period: periods[i]);
+                      },
                       chart: _BloodPressureLineChart(
-                        systolicSpots: _bpSystolicData[_bpPeriod],
-                        diastolicSpots: _bpDiastolicData[_bpPeriod],
+                        systolicSpots: _systolicSpots,
+                        diastolicSpots: _diastolicSpots,
                         isDark: isDark,
                       ),
                       legend: const _BpLegend(),
@@ -460,10 +519,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       iconColor: AppColors.activityColor,
                       period: _activityPeriod,
                       periods: periods,
-                      onPeriodChanged: (i) =>
-                          setState(() => _activityPeriod = i),
+                      onPeriodChanged: (i) {
+                        setState(() => _activityPeriod = i);
+                        final periods = ['day', 'week', 'month'];
+                        context
+                            .read<HealthProvider>()
+                            .fetchChartData(period: periods[i]);
+                      },
                       chart: _ActivityBarChart(
-                        groups: _activityData[_activityPeriod],
+                        groups: _activitySpots,
                         isDark: isDark,
                       ),
                     ),
@@ -486,15 +550,51 @@ class _DashboardScreenState extends State<DashboardScreen> {
 // ─── Pregnancy Banner ──────────────────────────────────────────────────────
 class _PregnancyBanner extends StatelessWidget {
   final bool isDark;
-  const _PregnancyBanner({required this.isDark});
+  final int nifasDay;
+
+  const _PregnancyBanner({
+    required this.isDark,
+    required this.nifasDay,
+  });
+
+  String get _nifasStatus {
+    if (nifasDay <= 7) return 'Masa Nifas Awal';
+    if (nifasDay <= 14) return 'Masa Nifas Minggu 2';
+    if (nifasDay <= 21) return 'Masa Nifas Minggu 3';
+    if (nifasDay <= 40) return 'Masa Nifas Minggu 4+';
+    return 'Masa Nifas Selesai';
+  }
+
+  String get _nifasEmoji {
+    if (nifasDay <= 7) return '🌸';
+    if (nifasDay <= 14) return '💪';
+    if (nifasDay <= 21) return '🌟';
+    if (nifasDay <= 40) return '✨';
+    return '🎉';
+  }
+
+  String get _nifasTip {
+    if (nifasDay <= 7) return 'Istirahat yang cukup sangat penting';
+    if (nifasDay <= 14) return 'Mulai aktivitas ringan perlahan';
+    if (nifasDay <= 21) return 'Jaga pola makan bergizi';
+    if (nifasDay <= 40) return 'Hampir selesai masa nifas!';
+    return 'Masa nifas telah selesai';
+  }
 
   @override
   Widget build(BuildContext context) {
+    final progress = (nifasDay / 40).clamp(0.0, 1.0);
+    final sisaHari = (40 - nifasDay).clamp(0, 40);
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [AppColors.primary, AppColors.primaryLight],
+          colors: [
+            AppColors.primaryDark,
+            AppColors.primary,
+            AppColors.primaryLight
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -507,52 +607,102 @@ class _PregnancyBanner extends StatelessWidget {
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Hari ke-14 Nifas 🤱',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Masa nifas berlangsung 40 hari',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.85),
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _PregStat(label: 'Sisa', value: '26 minggu'),
-                    const SizedBox(width: 16),
-                    _PregStat(label: 'Progress', value: '35%'),
+                    Text(
+                      'Hari ke-$nifasDay Nifas $_nifasEmoji',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _nifasTip,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.85),
+                        fontSize: 13,
+                      ),
+                    ),
                   ],
                 ),
-              ],
+              ),
+              const SizedBox(width: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  _nifasEmoji,
+                  style: const TextStyle(fontSize: 28),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // Progress bar
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                _nifasStatus,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.85),
+                  fontSize: 12,
+                ),
+              ),
+              Text(
+                '${(progress * 100).toInt()}%',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: progress,
+              backgroundColor: Colors.white.withOpacity(0.25),
+              color: Colors.white,
+              minHeight: 6,
             ),
           ),
-          const SizedBox(width: 16),
-          Container(
-            width: 72,
-            height: 72,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.child_care_rounded,
-              color: Colors.white,
-              size: 38,
-            ),
+          const SizedBox(height: 12),
+
+          // Stats
+          Row(
+            children: [
+              _PregStat(label: 'Sudah', value: '$nifasDay hari'),
+              Container(
+                width: 1,
+                height: 30,
+                color: Colors.white.withOpacity(0.3),
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+              ),
+              _PregStat(label: 'Sisa', value: '$sisaHari hari'),
+              Container(
+                width: 1,
+                height: 30,
+                color: Colors.white.withOpacity(0.3),
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+              ),
+              _PregStat(label: 'Total', value: '40 hari'),
+            ],
           ),
         ],
       ),

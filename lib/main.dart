@@ -15,6 +15,9 @@ import 'features/education/education_screen.dart';
 import 'package:provider/provider.dart';
 import 'core/providers/auth_provider.dart';
 import 'core/providers/health_provider.dart';
+import 'core/providers/sleep_provider.dart';
+import 'core/providers/mood_provider.dart';
+import 'core/providers/questionnaire_provider.dart';
 
 // di routes:
 
@@ -24,6 +27,9 @@ void main() {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => HealthProvider()),
+        ChangeNotifierProvider(create: (_) => SleepProvider()),
+        ChangeNotifierProvider(create: (_) => MoodProvider()),
+        ChangeNotifierProvider(create: (_) => QuestionnaireProvider()),
       ],
       child: const SmartMomsApp(),
     ),

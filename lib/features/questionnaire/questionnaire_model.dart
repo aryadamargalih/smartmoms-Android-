@@ -2,12 +2,14 @@ class QuestionnaireModel {
   final String id;
   final String category;
   final String description;
+  final int questionsCount;
   final List<QuestionModel> questions;
 
   QuestionnaireModel({
     required this.id,
     required this.category,
     required this.description,
+    required this.questionsCount,
     required this.questions,
   });
 }
@@ -47,6 +49,7 @@ final List<QuestionnaireModel> dummyQuestionnaires = [
     id: 'q1',
     category: 'Kesehatan Fisik',
     description: 'Kuesioner Edinburgh untuk deteksi depresi pasca melahirkan',
+    questionsCount: 5,
     questions: [
       QuestionModel(
         id: 'q1_1',
@@ -81,6 +84,7 @@ final List<QuestionnaireModel> dummyQuestionnaires = [
     id: 'q2',
     category: 'Kesehatan Mental',
     description: 'Pertanyaan seputar kondisi emosional dan mental',
+    questionsCount: 4,
     questions: [
       QuestionModel(
         id: 'q2_1',
@@ -111,6 +115,7 @@ final List<QuestionnaireModel> dummyQuestionnaires = [
     id: 'q3',
     category: 'Nutrisi & Pola Makan',
     description: 'Pertanyaan seputar asupan gizi selama kehamilan',
+    questionsCount: 3,
     questions: [
       QuestionModel(
         id: 'q3_1',
