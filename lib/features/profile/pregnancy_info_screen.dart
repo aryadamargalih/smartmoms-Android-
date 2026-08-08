@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/common_widgets.dart';
+import 'package:provider/provider.dart';
+import '../../../core/providers/auth_provider.dart';
+import '../../../core/providers/profile_provider.dart';
 
 class PregnancyInfoScreen extends StatefulWidget {
   const PregnancyInfoScreen({super.key});
@@ -14,34 +17,83 @@ class _PregnancyInfoScreenState extends State<PregnancyInfoScreen> {
   bool _isEditing = false;
   bool _isSaving = false;
 
-  final _hplController = TextEditingController(text: '15 Oktober 2024');
-  final _hphtController = TextEditingController(text: '8 Januari 2024');
-  final _weekController = TextEditingController(text: '24');
-  final _doctorController =
-      TextEditingController(text: 'dr. Rina Susanti, Sp.OG');
-  final _hospitalController =
-      TextEditingController(text: 'RS Abdurrab Pekanbaru');
-  final _notesController = TextEditingController(
-      text: 'Kehamilan berjalan normal, tidak ada komplikasi.');
-  String _selectedTrimester = 'Trimester 2';
+  final _hplController = TextEditingController();
+  final _hphtController = TextEditingController();
+  final _weekController = TextEditingController();
+  final _doctorController = TextEditingController();
+  final _hospitalController = TextEditingController();
+  final _notesController = TextEditingController();
 
-  final List<String> _trimesters = [
-    'Trimester 1',
-    'Trimester 2',
-    'Trimester 3'
-  ];
+  @override
+  void initState() {
+    super.initState();
+    final user = context.read<AuthProvider>().user;
+    if (user != null) {
+      _weekController.text = user.nifasDay?.toString() ?? '0';
+      _doctorController.text = user.doctorName ?? '';
+      _hospitalController.text = user.hospitalName ?? '';
+      _hplController.text = user.deliveryDate ?? '';
+
+      // Update milestone done status berdasarkan nifasDay
+      final nifasDay = user.nifasDay ?? 0;
+      for (var m in _milestones) {
+        m['done'] = (m['day'] as int) <= nifasDay;
+        if ((m['day'] as int) == nifasDay) {
+          m['icon'] = Icons.radio_button_checked;
+        } else if ((m['day'] as int) < nifasDay) {
+          m['icon'] = Icons.check_circle_rounded;
+        } else {
+          m['icon'] = Icons.radio_button_unchecked;
+        }
+      }
+    }
+  }
 
   // Milestone kehamilan
   final List<Map<String, dynamic>> _milestones = [
-  {'week': 4,  'title': 'Kehamilan Terdeteksi',   'done': true,  'icon': Icons.check_circle_rounded},
-  {'week': 8,  'title': 'USG Pertama',             'done': true,  'icon': Icons.check_circle_rounded},
-  {'week': 12, 'title': 'Akhir Trimester 1',       'done': true,  'icon': Icons.check_circle_rounded},
-  {'week': 20, 'title': 'USG Anatomi',             'done': true,  'icon': Icons.check_circle_rounded},
-  {'week': 24, 'title': 'Minggu Saat Ini',         'done': true,  'icon': Icons.radio_button_checked},
-  {'week': 28, 'title': 'Awal Trimester 3',        'done': false, 'icon': Icons.radio_button_unchecked},
-  {'week': 36, 'title': 'Persiapan Persalinan',    'done': false, 'icon': Icons.radio_button_unchecked},
-  {'week': 40, 'title': 'Perkiraan Lahir',         'done': false, 'icon': Icons.radio_button_unchecked},
-];
+    {
+      'day': 1,
+      'title': 'Hari Pertama Nifas',
+      'done': true,
+      'icon': Icons.check_circle_rounded
+    },
+    {
+      'day': 3,
+      'title': 'Pemeriksaan Pertama',
+      'done': true,
+      'icon': Icons.check_circle_rounded
+    },
+    {
+      'day': 7,
+      'title': 'Kontrol Minggu Pertama',
+      'done': true,
+      'icon': Icons.check_circle_rounded
+    },
+    {
+      'day': 14,
+      'title': 'Hari Ini',
+      'done': true,
+      'icon': Icons.radio_button_checked
+    },
+    {
+      'day': 20,
+      'title': 'Kontrol Minggu Ketiga',
+      'done': false,
+      'icon': Icons.radio_button_unchecked
+    },
+    {
+      'day': 30,
+      'title': 'Pemeriksaan Akhir Nifas',
+      'done': false,
+      'icon': Icons.radio_button_unchecked
+    },
+    {
+      'day': 40,
+      'title': 'Selesai Masa Nifas',
+      'done': false,
+      'icon': Icons.radio_button_unchecked
+    },
+  ];
 
   @override
   void dispose() {
@@ -56,22 +108,38 @@ class _PregnancyInfoScreenState extends State<PregnancyInfoScreen> {
 
   void _save() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() => _isSaving = true);
-    await Future.delayed(const Duration(seconds: 1));
+
+    final profileProvider = context.read<ProfileProvider>();
+    final success = await profileProvider.updateNifasInfo(
+      doctorName: _doctorController.text,
+      hospitalName: _hospitalController.text,
+      deliveryDate: _hplController.text,
+    );
+
     if (mounted) {
-      setState(() {
-        _isSaving = false;
-        _isEditing = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Data kehamilan berhasil disimpan!'),
-          backgroundColor: AppColors.success,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
+      if (success) {
+        await context.read<AuthProvider>().fetchMe();
+        setState(() => _isEditing = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Data kehamilan berhasil disimpan!'),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(profileProvider.errorMessage ?? 'Gagal menyimpan'),
+            backgroundColor: AppColors.danger,
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
     }
   }
 
@@ -145,13 +213,6 @@ class _PregnancyInfoScreenState extends State<PregnancyInfoScreen> {
                               ),
                             ),
                             const SizedBox(height: 2),
-                            Text(
-                              _selectedTrimester,
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.8),
-                                fontSize: 14,
-                              ),
-                            ),
                           ],
                         ),
                         Container(
@@ -369,54 +430,6 @@ class _PregnancyInfoScreenState extends State<PregnancyInfoScreen> {
                           : AppColors.lightTextSecondary,
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: _trimesters.map((t) {
-                      final isSelected = _selectedTrimester == t;
-                      return Expanded(
-                        child: GestureDetector(
-                          onTap: _isEditing
-                              ? () => setState(() => _selectedTrimester = t)
-                              : null,
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            margin: EdgeInsets.only(
-                                right: t != _trimesters.last ? 8 : 0),
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? AppColors.primary
-                                  : (isDark
-                                      ? AppColors.darkCard
-                                      : AppColors.lightBackground),
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: isSelected
-                                    ? AppColors.primary
-                                    : (isDark
-                                        ? AppColors.darkDivider
-                                        : AppColors.lightDivider),
-                              ),
-                            ),
-                            child: Center(
-                              child: Text(
-                                t.replaceAll('Trimester ', 'TM '),
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: isSelected
-                                      ? Colors.white
-                                      : (isDark
-                                          ? AppColors.darkTextSecondary
-                                          : AppColors.lightTextSecondary),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
                 ],
               ),
               const SizedBox(height: 14),
@@ -434,17 +447,6 @@ class _PregnancyInfoScreenState extends State<PregnancyInfoScreen> {
                   if (n == null || n < 0 || n > 42) return 'Masukkan 0-42';
                   return null;
                 },
-              ),
-              const SizedBox(height: 14),
-
-              _PregnancyField(
-                label: 'Hari Pertama Haid Terakhir (HPHT)',
-                controller: _hphtController,
-                prefixIcon: Icons.date_range_outlined,
-                isEditing: _isEditing,
-                isDark: isDark,
-                validator: (v) =>
-                    (v == null || v.isEmpty) ? 'Wajib diisi' : null,
               ),
               const SizedBox(height: 14),
 

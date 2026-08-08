@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
+import 'package:provider/provider.dart';
+import '../../core/providers/inbox_provider.dart' as ip;
 
 class InboxScreen extends StatefulWidget {
   const InboxScreen({super.key});
@@ -9,72 +11,23 @@ class InboxScreen extends StatefulWidget {
 }
 
 class _InboxScreenState extends State<InboxScreen> {
-  // Dummy data pesan dari admin/dokter
-  final List<_InboxMessage> _messages = [
-    _InboxMessage(
-      id: '1',
-      senderName: 'dr. Rina Susanti, Sp.OG',
-      senderRole: 'Dokter Kandungan',
-      subject: 'Hasil Pemeriksaan Minggu ke-24',
-      message:
-          'Selamat siang Bunda Siti! Berdasarkan data kesehatan minggu ini, kondisi Bunda secara umum baik. BPM dan tekanan darah dalam batas normal. Tetap jaga pola makan dan istirahat yang cukup ya. Jangan lupa kontrol minggu depan!',
-      time: DateTime.now().subtract(const Duration(hours: 2)),
-      isRead: false,
-      type: 'doctor',
-    ),
-    _InboxMessage(
-      id: '2',
-      senderName: 'Admin SmartMoms',
-      senderRole: 'Administrator',
-      subject: 'Pengingat Kuesioner EPDS',
-      message:
-          'Halo Bunda! Sudah waktunya mengisi kuesioner EPDS mingguan. Kuesioner ini membantu tim medis memantau kondisi kesehatan mental Bunda selama kehamilan. Silakan buka menu Kuesioner untuk mengisi sekarang.',
-      time: DateTime.now().subtract(const Duration(days: 1)),
-      isRead: false,
-      type: 'admin',
-    ),
-    _InboxMessage(
-      id: '3',
-      senderName: 'dr. Rina Susanti, Sp.OG',
-      senderRole: 'Dokter Kandungan',
-      subject: 'Tips Aktivitas Fisik Trimester 2',
-      message:
-          'Bunda, di trimester 2 ini sangat disarankan untuk tetap aktif bergerak. Jalan kaki 30 menit setiap pagi sangat baik untuk sirkulasi darah dan mempersiapkan tubuh menjelang persalinan. Hindari olahraga berat dan pastikan selalu terhidrasi!',
-      time: DateTime.now().subtract(const Duration(days: 3)),
-      isRead: true,
-      type: 'doctor',
-    ),
-    _InboxMessage(
-      id: '4',
-      senderName: 'Admin SmartMoms',
-      senderRole: 'Administrator',
-      subject: 'Selamat Datang di SmartMoms!',
-      message:
-          'Halo Bunda Siti! Selamat bergabung di SmartMoms. Aplikasi ini akan membantu memantau kesehatan Bunda dan bayi selama kehamilan. Hubungkan smartwatch Bunda untuk mulai memantau BPM dan tekanan darah secara real-time. Semoga kehamilan Bunda sehat dan lancar!',
-      time: DateTime.now().subtract(const Duration(days: 7)),
-      isRead: true,
-      type: 'admin',
-    ),
-  ];
-
-  int get _unreadCount => _messages.where((m) => !m.isRead).length;
-
-  void _markAsRead(String id) {
-    setState(() {
-      final msg = _messages.firstWhere((m) => m.id == id);
-      msg.isRead = true;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ip.InboxProvider>().fetchMessages();
     });
+  }
+
+  void _markAsRead(int id) {
+    context.read<ip.InboxProvider>().markAsRead(id);
   }
 
   void _markAllAsRead() {
-    setState(() {
-      for (final msg in _messages) {
-        msg.isRead = true;
-      }
-    });
+    context.read<ip.InboxProvider>().markAllAsRead();
   }
 
-  void _openMessage(_InboxMessage message) {
+  void _openMessage(ip.InboxMessage message) {
     _markAsRead(message.id);
     showModalBottomSheet(
       context: context,
@@ -87,6 +40,7 @@ class _InboxScreenState extends State<InboxScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final provider = context.watch<ip.InboxProvider>();
 
     return Scaffold(
       appBar: AppBar(
@@ -94,7 +48,7 @@ class _InboxScreenState extends State<InboxScreen> {
           children: [
             const Text('Pesan Masuk',
                 style: TextStyle(fontWeight: FontWeight.w700)),
-            if (_unreadCount > 0) ...[
+            if (provider.unreadCount > 0) ...[
               const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -103,7 +57,7 @@ class _InboxScreenState extends State<InboxScreen> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
-                  '$_unreadCount',
+                  '${provider.unreadCount}',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 11,
@@ -119,7 +73,7 @@ class _InboxScreenState extends State<InboxScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
-          if (_unreadCount > 0)
+          if (provider.unreadCount > 0)
             TextButton(
               onPressed: _markAllAsRead,
               child: const Text(
@@ -133,25 +87,32 @@ class _InboxScreenState extends State<InboxScreen> {
             ),
         ],
       ),
-      body: _messages.isEmpty
-          ? _EmptyInbox(isDark: isDark)
-          : ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: _messages.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
-              itemBuilder: (_, i) => _MessageCard(
-                message: _messages[i],
-                isDark: isDark,
-                onTap: () => _openMessage(_messages[i]),
-              ),
-            ),
+      body: provider.isLoading
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.primary))
+          : provider.messages.isEmpty
+              ? _EmptyInbox(isDark: isDark)
+              : RefreshIndicator(
+                  onRefresh: () => provider.fetchMessages(),
+                  color: AppColors.primary,
+                  child: ListView.separated(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: provider.messages.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (_, i) => _MessageCard(
+                      message: provider.messages[i],
+                      isDark: isDark,
+                      onTap: () => _openMessage(provider.messages[i]),
+                    ),
+                  ),
+                ),
     );
   }
 }
 
 // ─── Message Card ──────────────────────────────────────────────────────────
 class _MessageCard extends StatelessWidget {
-  final _InboxMessage message;
+  final ip.InboxMessage message;
   final bool isDark;
   final VoidCallback onTap;
 
@@ -228,7 +189,7 @@ class _MessageCard extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        _formatTime(message.time),
+                        message.sentAt,
                         style: TextStyle(
                           fontSize: 11,
                           color: isDark
@@ -319,7 +280,7 @@ class _MessageCard extends StatelessWidget {
 
 // ─── Message Detail Bottom Sheet ───────────────────────────────────────────
 class _MessageDetail extends StatelessWidget {
-  final _InboxMessage message;
+  final ip.InboxMessage message;
 
   const _MessageDetail({required this.message});
 
@@ -398,7 +359,7 @@ class _MessageDetail extends StatelessWidget {
                 ),
               ),
               Text(
-                '${message.time.day}/${message.time.month}/${message.time.year}',
+                message.sentAt,
                 style: TextStyle(
                   fontSize: 12,
                   color: isDark

@@ -18,9 +18,12 @@ import 'core/providers/health_provider.dart';
 import 'core/providers/sleep_provider.dart';
 import 'core/providers/mood_provider.dart';
 import 'core/providers/questionnaire_provider.dart';
+import 'core/providers/inbox_provider.dart';
+import 'core/providers/education_provider.dart';
+import 'core/providers/profile_provider.dart';
+import 'core/providers/statistics_provider.dart';
 
 // di routes:
-
 void main() {
   runApp(
     MultiProvider(
@@ -30,6 +33,10 @@ void main() {
         ChangeNotifierProvider(create: (_) => SleepProvider()),
         ChangeNotifierProvider(create: (_) => MoodProvider()),
         ChangeNotifierProvider(create: (_) => QuestionnaireProvider()),
+        ChangeNotifierProvider(create: (_) => InboxProvider()),
+        ChangeNotifierProvider(create: (_) => EducationProvider()),
+        ChangeNotifierProvider(create: (_) => ProfileProvider()),
+        ChangeNotifierProvider(create: (_) => StatisticsProvider()),
       ],
       child: const SmartMomsApp(),
     ),

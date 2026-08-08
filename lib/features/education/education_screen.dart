@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import 'education_model.dart';
+import 'package:provider/provider.dart';
+import '../../core/providers/education_provider.dart';
+import 'package:flutter_html/flutter_html.dart';
 
 class EducationScreen extends StatefulWidget {
   const EducationScreen({super.key});
@@ -10,19 +13,28 @@ class EducationScreen extends StatefulWidget {
 }
 
 class _EducationScreenState extends State<EducationScreen> {
-  // Dummy risk level — nanti dari AI Risk Prediction
-  final String _riskLevel = 'moderate';
   EducationCategory? _selectedCategory;
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<EducationProvider>().fetchArticles();
+    });
+  }
+
   List<EducationArticle> get _filteredArticles {
-    final recommended = getRecommendedArticles(_riskLevel);
-    if (_selectedCategory == null) return recommended;
-    return recommended.where((a) => a.category == _selectedCategory).toList();
+    final provider = context.read<EducationProvider>();
+    if (_selectedCategory == null) return provider.articles;
+    return provider.articles
+        .where((a) => a.category == _selectedCategory)
+        .toList();
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final provider = context.watch<EducationProvider>();
 
     return Scaffold(
       appBar: AppBar(
@@ -33,141 +45,196 @@ class _EducationScreenState extends State<EducationScreen> {
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Banner rekomendasi
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [AppColors.primary, AppColors.primaryLight],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
+      body: provider.isLoading
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.primary))
+          : provider.errorMessage != null
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.error_outline_rounded,
+                          size: 48, color: AppColors.danger),
+                      const SizedBox(height: 12),
+                      Text(provider.errorMessage!),
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        onPressed: () => provider.fetchArticles(),
+                        child: const Text('Coba Lagi'),
                       ),
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
+                    ],
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: () => provider.fetchArticles(),
+                  color: AppColors.primary,
+                  child: CustomScrollView(
+                    slivers: [
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
-                                'Konten Untukmu 📚',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
+                              // Banner
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      AppColors.primary,
+                                      AppColors.primaryLight
+                                    ],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                  borderRadius: BorderRadius.circular(18),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'Konten Untukmu 📚',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 3),
+                                          Text(
+                                            'Disesuaikan dengan kondisi kesehatanmu',
+                                            style: TextStyle(
+                                              color: Colors.white
+                                                  .withOpacity(0.85),
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withOpacity(0.2),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: Text(
+                                        '${_filteredArticles.length} artikel',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              const SizedBox(height: 3),
-                              Text(
-                                'Disesuaikan dengan kondisi kesehatanmu saat ini',
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.85),
-                                  fontSize: 12,
+                              const SizedBox(height: 16),
+
+                              // Category filter
+                              SizedBox(
+                                height: 36,
+                                child: ListView(
+                                  scrollDirection: Axis.horizontal,
+                                  children: [
+                                    _CategoryChip(
+                                      label: 'Semua',
+                                      isSelected: _selectedCategory == null,
+                                      color: AppColors.primary,
+                                      onTap: () => setState(
+                                          () => _selectedCategory = null),
+                                      isDark: isDark,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    ...EducationCategory.values.map((c) =>
+                                        Padding(
+                                          padding:
+                                              const EdgeInsets.only(right: 8),
+                                          child: _CategoryChip(
+                                            label: c.label,
+                                            isSelected: _selectedCategory == c,
+                                            color: c.color,
+                                            onTap: () => setState(
+                                                () => _selectedCategory = c),
+                                            isDark: isDark,
+                                          ),
+                                        )),
+                                  ],
                                 ),
                               ),
+                              const SizedBox(height: 16),
                             ],
                           ),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            '${_filteredArticles.length} artikel',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Category filter
-                  SizedBox(
-                    height: 36,
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      children: [
-                        // All
-                        _CategoryChip(
-                          label: 'Semua',
-                          isSelected: _selectedCategory == null,
-                          color: AppColors.primary,
-                          onTap: () => setState(() => _selectedCategory = null),
-                          isDark: isDark,
-                        ),
-                        const SizedBox(width: 8),
-                        ...EducationCategory.values.map((c) => Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: _CategoryChip(
-                                label: c.label,
-                                isSelected: _selectedCategory == c,
-                                color: c.color,
-                                onTap: () =>
-                                    setState(() => _selectedCategory = c),
-                                isDark: isDark,
-                              ),
-                            )),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-              ),
-            ),
-          ),
-
-          // Article list
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (_, i) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: _ArticleCard(
-                    article: _filteredArticles[i],
-                    isDark: isDark,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ArticleDetailScreen(
-                          article: _filteredArticles[i],
-                        ),
                       ),
-                    ),
+
+                      // Article list
+                      _filteredArticles.isEmpty
+                          ? SliverToBoxAdapter(
+                              child: Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(40),
+                                  child: Column(
+                                    children: [
+                                      const Icon(Icons.article_outlined,
+                                          size: 48,
+                                          color: AppColors.lightTextSecondary),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        'Belum ada artikel',
+                                        style: TextStyle(
+                                          color: isDark
+                                              ? AppColors.darkTextSecondary
+                                              : AppColors.lightTextSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            )
+                          : SliverPadding(
+                              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                              sliver: SliverList(
+                                delegate: SliverChildBuilderDelegate(
+                                  (_, i) => Padding(
+                                    padding: const EdgeInsets.only(bottom: 12),
+                                    child: _ArticleCard(
+                                      article: _filteredArticles[i],
+                                      isDark: isDark,
+                                      onTap: () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => _ArticleDetailScreen(
+                                            article: _filteredArticles[i],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  childCount: _filteredArticles.length,
+                                ),
+                              ),
+                            ),
+                    ],
                   ),
                 ),
-                childCount: _filteredArticles.length,
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
 
 // ─── Article Detail Screen ─────────────────────────────────────────────────
-class ArticleDetailScreen extends StatelessWidget {
+class _ArticleDetailScreen extends StatelessWidget {
   final EducationArticle article;
 
-  const ArticleDetailScreen({required this.article});
+  const _ArticleDetailScreen({required this.article});
 
   @override
   Widget build(BuildContext context) {
@@ -288,13 +355,30 @@ class ArticleDetailScreen extends StatelessWidget {
             const SizedBox(height: 20),
 
             // Content
-            Text(
-              article.content,
-              style: TextStyle(
-                fontSize: 14,
-                height: 1.8,
-                color: isDark ? AppColors.darkText : AppColors.lightText,
-              ),
+            Html(
+              data: article.content,
+              style: {
+                'body': Style(
+                  fontSize: FontSize(14),
+                  lineHeight: LineHeight(1.8),
+                  color: isDark ? AppColors.darkText : AppColors.lightText,
+                ),
+                'h2': Style(
+                  fontSize: FontSize(16),
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? AppColors.darkText : AppColors.lightText,
+                ),
+                'li': Style(
+                  fontSize: FontSize(14),
+                  lineHeight: LineHeight(1.8),
+                  color: isDark ? AppColors.darkText : AppColors.lightText,
+                ),
+                'p': Style(
+                  fontSize: FontSize(14),
+                  lineHeight: LineHeight(1.8),
+                  color: isDark ? AppColors.darkText : AppColors.lightText,
+                ),
+              },
             ),
             const SizedBox(height: 28),
 

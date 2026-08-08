@@ -11,6 +11,7 @@ import '../../core/providers/health_provider.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/providers/sleep_provider.dart';
 import '../../core/providers/mood_provider.dart';
+import '../../core/providers/inbox_provider.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -165,6 +166,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       context.read<HealthProvider>().refreshAll();
       context.read<SleepProvider>().fetchToday();
+      context.read<InboxProvider>().fetchMessages();
 
       // Tunggu mood selesai fetch dulu baru cek reminder
       await context.read<MoodProvider>().fetchToday();
@@ -272,6 +274,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final user = context.watch<AuthProvider>().user;
     final sleep = context.watch<SleepProvider>();
     final mood = context.watch<MoodProvider>();
+    final unreadCount = context.watch<InboxProvider>().unreadCount;
 
     return Scaffold(
       body: SafeArea(
@@ -354,18 +357,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               builder: (_) => const InboxScreen()),
                         ),
                       ),
-                      Positioned(
-                        right: 8,
-                        top: 8,
-                        child: Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: AppColors.danger,
-                            shape: BoxShape.circle,
+                      if (unreadCount > 0)
+                        Positioned(
+                          right: 8,
+                          top: 8,
+                          child: Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                              color: AppColors.danger,
+                              shape: BoxShape.circle,
+                            ),
                           ),
                         ),
-                      ),
                     ],
                   ),
                   IconButton(

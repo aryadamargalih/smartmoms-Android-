@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/common_widgets.dart';
+import 'package:provider/provider.dart';
+import '../../../core/providers/auth_provider.dart';
+import '../../../core/providers/profile_provider.dart';
 
 class PersonalDataScreen extends StatefulWidget {
   const PersonalDataScreen({super.key});
@@ -14,17 +17,35 @@ class _PersonalDataScreenState extends State<PersonalDataScreen> {
   bool _isEditing = false;
   bool _isSaving = false;
 
-  // Controller
-  final _nameController = TextEditingController(text: 'Siti Rahayu');
-  final _emailController = TextEditingController(text: 'siti@email.com');
-  final _phoneController = TextEditingController(text: '08123456789');
-  final _ageController = TextEditingController(text: '28');
-  final _weightController = TextEditingController(text: '62');
-  final _heightController = TextEditingController(text: '158');
-  final _pregnancyWeekController = TextEditingController(text: '24');
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _ageController = TextEditingController();
+  final _weightController = TextEditingController();
+  final _heightController = TextEditingController();
+  final _pregnancyWeekController = TextEditingController();
   String _selectedBloodType = 'A';
 
   final List<String> _bloodTypes = ['A', 'B', 'AB', 'O'];
+
+  @override
+  void initState() {
+    super.initState();
+    // Isi controller dengan data user yang sudah ada
+    final user = context.read<AuthProvider>().user;
+    if (user != null) {
+      _nameController.text = user.name;
+      _emailController.text = user.email;
+      _phoneController.text = user.phone ?? '';
+      _ageController.text = user.age?.toString() ?? '';
+      _weightController.text = user.weight?.toString() ?? '';
+      _heightController.text = user.height?.toString() ?? '';
+      _pregnancyWeekController.text = user.nifasDay?.toString() ?? '';
+      if (user.bloodType != null) {
+        _selectedBloodType = user.bloodType!;
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -44,22 +65,44 @@ class _PersonalDataScreenState extends State<PersonalDataScreen> {
 
   void _save() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() => _isSaving = true);
-    await Future.delayed(const Duration(seconds: 1));
+
+    final profileProvider = context.read<ProfileProvider>();
+    final success = await profileProvider.updateProfile(
+      name: _nameController.text,
+      email: _emailController.text,
+      phone: _phoneController.text,
+      age: int.tryParse(_ageController.text) ?? 0,
+      bloodType: _selectedBloodType,
+      weight: double.tryParse(_weightController.text) ?? 0,
+      height: double.tryParse(_heightController.text) ?? 0,
+      deliveryDate: _pregnancyWeekController.text,
+    );
+
     if (mounted) {
-      setState(() {
-        _isSaving = false;
-        _isEditing = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Data berhasil disimpan!'),
-          backgroundColor: AppColors.success,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
+      if (success) {
+        // Refresh data user di AuthProvider
+        await context.read<AuthProvider>().fetchMe();
+        setState(() => _isEditing = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Data berhasil disimpan!'),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(profileProvider.errorMessage ?? 'Gagal menyimpan'),
+            backgroundColor: AppColors.danger,
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
     }
   }
 
@@ -312,7 +355,7 @@ class _PersonalDataScreenState extends State<PersonalDataScreen> {
               if (_isEditing)
                 GradientButton(
                   text: 'Simpan Perubahan',
-                  isLoading: _isSaving,
+                  isLoading: context.watch<ProfileProvider>().isSaving,
                   onPressed: _save,
                 ),
             ],
