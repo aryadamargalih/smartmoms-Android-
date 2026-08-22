@@ -15,7 +15,6 @@ class PersonalDataScreen extends StatefulWidget {
 class _PersonalDataScreenState extends State<PersonalDataScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isEditing = false;
-  bool _isSaving = false;
 
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
