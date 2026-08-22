@@ -48,11 +48,22 @@ class SleepProvider extends ChangeNotifier {
     SleepQuality? quality,
     List<SleepDisturbance> disturbances = const [],
   }) async {
+    String hhmm(DateTime t) =>
+        '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+    const disturbanceApiValue = {
+      SleepDisturbance.frequentWaking: 'frequent_waking',
+      SleepDisturbance.difficultyFallingAsleep: 'difficulty_sleeping',
+      SleepDisturbance.nightmare: 'nightmare',
+      SleepDisturbance.nightSweats: 'night_sweats',
+      SleepDisturbance.none: 'none',
+    };
+
     final response = await ApiService.post('/sleep', body: {
-      'bed_time': bedTime.toIso8601String(),
-      'wake_time': wakeTime.toIso8601String(),
+      'bed_time': hhmm(bedTime),
+      'wake_time': hhmm(wakeTime),
       'quality': quality?.value,
-      'disturbances': disturbances.map((d) => d.name).toList(),
+      'disturbances': disturbances.map((d) => disturbanceApiValue[d]).toList(),
     });
 
     if (response['success'] == true) {
@@ -60,11 +71,44 @@ class SleepProvider extends ChangeNotifier {
       notifyListeners();
       return true;
     }
+    print('[Sleep] submit failed: ${response['message']}, '
+        'errors: ${response['errors']}');
+    _errorMessage = response['message'];
+    notifyListeners();
     return false;
   }
 
   // ── Parse JSON ──────────────────────────────────────────────────────
   SleepRecord _fromJson(Map<String, dynamic> json) {
+    // Helper parse time string jadi DateTime
+    DateTime parseTime(String? timeStr, DateTime baseDate) {
+      if (timeStr == null) return baseDate;
+      try {
+        // Coba parse full datetime dulu
+        return DateTime.parse(timeStr);
+      } catch (e) {
+        // Kalau gagal, berarti format HH:mm:ss
+        final parts = timeStr.split(':');
+        return DateTime(
+          baseDate.year,
+          baseDate.month,
+          baseDate.day,
+          int.tryParse(parts[0]) ?? 0,
+          int.tryParse(parts[1]) ?? 0,
+          int.tryParse(parts.length > 2 ? parts[2] : '0') ?? 0,
+        );
+      }
+    }
+
+    final date = DateTime.parse(json['date']);
+    final bedTime = parseTime(json['bed_time'], date);
+    var wakeTime = parseTime(json['wake_time'], date);
+
+    // Kalau wake time lebih awal dari bed time, berarti bangun keesokan harinya
+    if (wakeTime.isBefore(bedTime)) {
+      wakeTime = wakeTime.add(const Duration(days: 1));
+    }
+
     // Parse quality
     SleepQuality? quality;
     if (json['quality'] != null) {
@@ -76,22 +120,26 @@ class SleepProvider extends ChangeNotifier {
     }
 
     // Parse disturbances
+    const disturbanceFromApi = {
+      'frequent_waking': SleepDisturbance.frequentWaking,
+      'difficulty_sleeping': SleepDisturbance.difficultyFallingAsleep,
+      'nightmare': SleepDisturbance.nightmare,
+      'night_sweats': SleepDisturbance.nightSweats,
+      'none': SleepDisturbance.none,
+    };
     List<SleepDisturbance> disturbances = [];
     if (json['disturbances'] != null) {
       final list = json['disturbances'] as List;
-      disturbances = list.map((d) {
-        return SleepDisturbance.values.firstWhere(
-          (e) => e.name == d,
-          orElse: () => SleepDisturbance.none,
-        );
-      }).toList();
+      disturbances = list
+          .map((d) => disturbanceFromApi[d] ?? SleepDisturbance.none)
+          .toList();
     }
 
     return SleepRecord(
       id: json['id'].toString(),
-      bedTime: DateTime.parse(json['bed_time']),
-      wakeTime: DateTime.parse(json['wake_time']),
-      date: DateTime.parse(json['date']),
+      bedTime: bedTime,
+      wakeTime: wakeTime,
+      date: date,
       quality: quality,
       disturbances: disturbances,
     );

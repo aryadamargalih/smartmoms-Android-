@@ -9,6 +9,7 @@ import '../../main.dart';
 import '../education/education_screen.dart';
 import 'package:provider/provider.dart';
 import '../../core/providers/auth_provider.dart';
+import '../video/video_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -131,6 +132,14 @@ class ProfileScreen extends StatelessWidget {
                       context,
                       MaterialPageRoute(
                           builder: (_) => const EducationScreen()),
+                    ),
+                  ),
+                  _ProfileMenuItem(
+                    icon: Icons.smart_display_outlined,
+                    label: 'Video Edukasi',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const VideoScreen()),
                     ),
                   ),
                   _ProfileMenuItem(

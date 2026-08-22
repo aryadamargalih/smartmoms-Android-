@@ -22,9 +22,14 @@ import 'core/providers/inbox_provider.dart';
 import 'core/providers/education_provider.dart';
 import 'core/providers/profile_provider.dart';
 import 'core/providers/statistics_provider.dart';
+import 'core/services/api_service.dart';
+import 'features/video/video_screen.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 // di routes:
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: ".env");
   runApp(
     MultiProvider(
       providers: [
@@ -99,6 +104,7 @@ class _SmartMomsAppState extends State<SmartMomsApp> {
           '/profile': (_) => const ProfileScreen(),
           AppRoutes.questionnaire: (_) => const QuestionnaireScreen(),
           AppRoutes.education: (_) => const EducationScreen(),
+          AppRoutes.video: (_) => const VideoScreen(),
         },
       ),
     );
@@ -112,8 +118,9 @@ class MainScreen extends StatefulWidget {
   State<MainScreen> createState() => MainScreenState();
 }
 
-class MainScreenState extends State<MainScreen> {
+class MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   int _currentIndex = 0;
+  int? _sessionId;
 
   final List<Widget> _pages = [
     const DashboardScreen(),
@@ -124,6 +131,78 @@ class MainScreenState extends State<MainScreen> {
 
   void setIndex(int index) {
     setState(() => _currentIndex = index);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // Start Session
+    _startSession();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    switch (state) {
+      case AppLifecycleState.resumed:
+        // App kembali ke foreground
+        _startSession();
+        _refreshOnResume();
+        break;
+      case AppLifecycleState.paused:
+      case AppLifecycleState.inactive:
+        // App ke background atau tidak aktif
+        _endSession();
+        break;
+      default:
+        break;
+    }
+  }
+
+  // ── Start Session ───────────────────────────────────────────────────
+  Future<void> _startSession() async {
+    try {
+      final response = await ApiService.post('/user/session/start');
+      if (response['success'] == true) {
+        _sessionId = response['data']['session_id'];
+      }
+    } catch (e) {
+      // Silent fail — jangan crash app
+      debugPrint('Session start error: $e');
+    }
+  }
+
+  // ── End Session ─────────────────────────────────────────────────────
+  Future<void> _endSession() async {
+    if (_sessionId == null) return; // skip kalau belum ada sesi aktif
+
+    try {
+      await ApiService.post(
+        '/user/session/end',
+        body: {'session_id': _sessionId},
+      );
+      _sessionId = null; // reset session id
+    } catch (e) {
+      // Silent fail — jangan crash app
+      debugPrint('Session end error: $e');
+    }
+  }
+
+  // ── Refresh data saat resume ────────────────────────────────────────
+  Future<void> _refreshOnResume() async {
+    if (!mounted) return;
+    context.read<HealthProvider>().refreshAll();
+    context.read<SleepProvider>().fetchToday();
+    context.read<InboxProvider>().fetchMessages();
+    await context.read<MoodProvider>().fetchToday();
   }
 
   @override

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/constants/app_constants.dart';
 import 'package:smartmoms/main.dart';
+import '../../core/services/api_service.dart';
+import '../../core/widgets/common_widgets.dart';
 
 class AiChatScreen extends StatefulWidget {
   const AiChatScreen({super.key});
@@ -18,6 +20,9 @@ class _AiChatScreenState extends State<AiChatScreen>
   final ScrollController _scrollController = ScrollController();
   final List<_ChatMessage> _messages = [];
   bool _isTyping = false;
+
+  bool _isAnalyzing = false;
+  Map<String, dynamic>? _riskData;
 
   // Suggestion chips
   final List<String> _suggestions = [
@@ -38,6 +43,38 @@ class _AiChatScreenState extends State<AiChatScreen>
         time: DateTime.now(),
       ),
     );
+    // Fetch risk prediction saat halaman dibuka
+    _fetchRiskPrediction();
+  }
+
+  Future<void> _fetchRiskPrediction() async {
+    setState(() => _isAnalyzing = true);
+
+    final response = await ApiService.get('/risk-prediction/latest');
+
+    if (mounted) {
+      setState(() {
+        _isAnalyzing = false;
+        if (response['success'] == true) {
+          _riskData = response['data'];
+        }
+      });
+    }
+  }
+
+  Future<void> _analyzeRisk() async {
+    setState(() => _isAnalyzing = true);
+
+    final response = await ApiService.post('/ai/risk-analyze');
+
+    if (mounted) {
+      setState(() {
+        _isAnalyzing = false;
+        if (response['success'] == true) {
+          _riskData = response['data'];
+        }
+      });
+    }
   }
 
   @override
@@ -48,47 +85,55 @@ class _AiChatScreenState extends State<AiChatScreen>
     super.dispose();
   }
 
-  void _sendMessage(String text) {
+  void _sendMessage(String text) async {
     if (text.trim().isEmpty) return;
+
     setState(() {
       _messages
           .add(_ChatMessage(text: text, isAi: false, time: DateTime.now()));
       _inputController.clear();
       _isTyping = true;
     });
+
     _scrollToBottom();
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) {
-        setState(() {
-          _isTyping = false;
-          _messages.add(_ChatMessage(
-            text: _getAiResponse(text),
+
+    // Hit API
+    final response = await ApiService.post('/ai/chat', body: {
+      'messages': [
+        // history sebelumnya
+        ..._messages
+            .where((m) => m != _messages.last)
+            .take(10)
+            .map((m) => {
+                  'role': m.isAi ? 'assistant' : 'user',
+                  'content': m.text,
+                })
+            .toList(),
+        // pesan terbaru
+        {
+          'role': 'user',
+          'content': text,
+        }
+      ],
+    });
+
+    print('AI Chat response: $response'); // tambah ini
+
+    if (mounted) {
+      setState(() {
+        _isTyping = false;
+        _messages.add(
+          _ChatMessage(
+            text: response['success'] == true
+                ? response['data']['reply'] ?? 'Maaf, terjadi kesalahan.'
+                : 'Maaf, tidak bisa terhubung ke AI saat ini.',
             isAi: true,
             time: DateTime.now(),
-          ));
-        });
-        _scrollToBottom();
-      }
-    });
-  }
-
-  String _getAiResponse(String input) {
-    final lower = input.toLowerCase();
-    if (lower.contains('bpm') || lower.contains('detak')) {
-      return 'Berdasarkan data BPM kamu hari ini (84 BPM), detak jantungmu berada dalam kisaran normal untuk ibu nifas (60-100 BPM). Ini tanda pemulihan yang baik! 💗\n\nPastikan kamu cukup istirahat dan tidak melakukan aktivitas berat selama masa nifas.';
+          ),
+        );
+      });
+      _scrollToBottom();
     }
-    if (lower.contains('tekanan') || lower.contains('darah')) {
-      return 'Tekanan darah kamu hari ini 120/78 mmHg tergolong normal. 🩺\n\nPada masa nifas, penting memantau tekanan darah secara rutin karena risiko hipertensi pasca melahirkan. Segera hubungi dokter jika merasa pusing atau sakit kepala hebat.';
-    }
-    if (lower.contains('aktivitas') || lower.contains('langkah')) {
-      return 'Aktivitas fisikmu hari ini sudah mencapai 5,430 langkah. 🚶‍♀️\n\nUntuk ibu nifas, aktivitas ringan seperti jalan kaki sangat dianjurkan untuk mempercepat pemulihan. Hindari aktivitas berat hingga masa nifas selesai (40 hari).';
-    }
-    if (lower.contains('epds') ||
-        lower.contains('depresi') ||
-        lower.contains('sedih')) {
-      return 'Kesehatan mental di masa nifas sangat penting. 💙\n\nBerdasarkan hasil kuesioner EPDS kamu, kondisimu perlu terus dipantau. Jangan ragu untuk berbicara dengan dokter atau bidan jika kamu merasa sedih, cemas, atau tidak seperti biasanya.';
-    }
-    return 'Berdasarkan data kesehatan kamu minggu ini, kondisi pemulihan nifasmu secara umum baik. BPM dan tekanan darah dalam batas normal. 🌸\n\nTerus pantau kesehatanmu dan jangan lupa istirahat yang cukup. Konsultasi rutin dengan bidan atau dokter tetap diperlukan ya!';
   }
 
   void _scrollToBottom() {
@@ -221,9 +266,12 @@ class _AiChatScreenState extends State<AiChatScreen>
           ),
 
           // ── Tab 2: Analisis Risiko ────────────────────────────────────
+          // Di TabBarView children index 1
           _RiskAnalysisTab(
             isDark: isDark,
-            onChatTap: () => _tabController.animateTo(0),
+            isAnalyzing: _isAnalyzing,
+            riskData: _riskData,
+            onAnalyze: _analyzeRisk,
           ),
         ],
       ),
@@ -233,151 +281,285 @@ class _AiChatScreenState extends State<AiChatScreen>
 
 class _RiskAnalysisTab extends StatelessWidget {
   final bool isDark;
-  final VoidCallback onChatTap;
+  final bool isAnalyzing;
+  final Map<String, dynamic>? riskData;
+  final VoidCallback onAnalyze;
 
   const _RiskAnalysisTab({
     required this.isDark,
-    required this.onChatTap,
+    required this.isAnalyzing,
+    required this.riskData,
+    required this.onAnalyze,
   });
 
-  // Dummy risk level: 'low', 'moderate', 'high'
-  static const String _riskLevel = 'moderate';
+  String get _riskLevel => riskData?['risk_level'] ?? 'low';
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Risk Level Card ───────────────────────────────────────────
-          _RiskLevelCard(riskLevel: _riskLevel, isDark: isDark),
-          const SizedBox(height: 24),
+    if (isAnalyzing) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(color: AppColors.accent),
+            SizedBox(height: 16),
+            Text('AI sedang menganalisis data kesehatanmu...'),
+          ],
+        ),
+      );
+    }
 
-          // ── Indikator ─────────────────────────────────────────────────
-          _SectionLabel(label: 'Indikator Analisis', isDark: isDark),
-          const SizedBox(height: 12),
-          _IndicatorCard(
-            icon: Icons.assignment_outlined,
-            label: 'Skor EPDS',
-            value: '12/30',
-            detail: 'Skor 10-12 menunjukkan kemungkinan depresi ringan',
-            color: AppColors.warning,
-            isDark: isDark,
-          ),
-          const SizedBox(height: 10),
-          _IndicatorCard(
-            icon: Icons.mood_rounded,
-            label: 'Pola Mood 7 Hari',
-            value: '4 hari negatif',
-            detail: 'Dominan lelah, cemas, dan sedih',
-            color: AppColors.warning,
-            isDark: isDark,
-          ),
-          const SizedBox(height: 10),
-          _IndicatorCard(
-            icon: Icons.bedtime_rounded,
-            label: 'Kualitas Tidur',
-            value: 'Rata-rata 5.8 jam',
-            detail: 'Di bawah rekomendasi 7 jam untuk ibu nifas',
-            color: AppColors.warning,
-            isDark: isDark,
-          ),
-          const SizedBox(height: 10),
-          _IndicatorCard(
-            icon: Icons.favorite_rounded,
-            label: 'Detak Jantung',
-            value: '84 BPM',
-            detail: 'Normal untuk ibu nifas',
-            color: AppColors.success,
-            isDark: isDark,
-          ),
-          const SizedBox(height: 10),
-          _IndicatorCard(
-            icon: Icons.monitor_heart_rounded,
-            label: 'Tekanan Darah',
-            value: '120/78 mmHg',
-            detail: 'Normal, tidak ada tanda hipertensi',
-            color: AppColors.success,
-            isDark: isDark,
-          ),
-          const SizedBox(height: 10),
-          _IndicatorCard(
-            icon: Icons.directions_walk_rounded,
-            label: 'Aktivitas Fisik',
-            value: '5.430 langkah/hari',
-            detail: '72% dari target harian',
-            color: AppColors.primary,
-            isDark: isDark,
-          ),
-          const SizedBox(height: 24),
-
-          // ── Rekomendasi ───────────────────────────────────────────────
-          _SectionLabel(label: 'Rekomendasi', isDark: isDark),
-          const SizedBox(height: 12),
-          _RecommendationCard(
-            riskLevel: _riskLevel,
-            isDark: isDark,
-          ),
-          const SizedBox(height: 20),
-
-          // ── Tombol tanya AI ───────────────────────────────────────────
-          SizedBox(
-            width: double.infinity,
-            height: 52,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [AppColors.accent, AppColors.accentLight],
-                ),
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.accent.withOpacity(0.3),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: ElevatedButton.icon(
-                onPressed: onChatTap,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  shadowColor: Colors.transparent,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                ),
-                icon: const Icon(Icons.chat_bubble_outline_rounded,
-                    color: Colors.white, size: 18),
-                label: const Text(
-                  'Diskusikan dengan AI',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
+    if (riskData == null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.analytics_outlined,
+                size: 64, color: AppColors.primary),
+            const SizedBox(height: 16),
+            const Text(
+              'Belum ada analisis risiko',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
             ),
-          ),
-          const SizedBox(height: 12),
-
-          // Terakhir dianalisis
-          Center(
-            child: Text(
-              'Terakhir dianalisis: Hari ini, 08:30',
+            const SizedBox(height: 8),
+            Text(
+              'Tap tombol di bawah untuk mulai analisis',
               style: TextStyle(
-                fontSize: 11,
                 color: isDark
                     ? AppColors.darkTextSecondary
                     : AppColors.lightTextSecondary,
               ),
             ),
+            const SizedBox(height: 24),
+            GradientButton(
+              text: 'Analisis Sekarang',
+              onPressed: onAnalyze,
+              width: 200,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Risk level card
+          _RiskLevelCard(
+            riskLevel: _riskLevel,
+            isDark: isDark,
+            summary: riskData?['summary'],
           ),
+          const SizedBox(height: 24),
+
+          // Indikator dari API
+          _SectionLabel(label: 'Indikator Analisis', isDark: isDark),
+          const SizedBox(height: 12),
+
+          if (riskData?['epds_score'] != null)
+            _IndicatorCard(
+              icon: Icons.assignment_outlined,
+              label: 'Skor EPDS',
+              value: '${riskData!['epds_score']}',
+              detail: 'Berdasarkan hasil kuesioner EPDS terakhir',
+              color: _getScoreColor(riskData!['epds_score']),
+              isDark: isDark,
+            ),
+          const SizedBox(height: 10),
+
+          if (riskData?['mood_score'] != null)
+            _IndicatorCard(
+              icon: Icons.mood_rounded,
+              label: 'Pola Mood',
+              value: '${riskData!['mood_score']}',
+              detail: 'Analisis mood 7 hari terakhir',
+              color: _getScoreColor(riskData!['mood_score']),
+              isDark: isDark,
+            ),
+          const SizedBox(height: 10),
+
+          if (riskData?['sleep_score'] != null)
+            _IndicatorCard(
+              icon: Icons.bedtime_rounded,
+              label: 'Kualitas Tidur',
+              value: '${riskData!['sleep_score']}',
+              detail: 'Rata-rata kualitas tidur minggu ini',
+              color: _getScoreColor(riskData!['sleep_score']),
+              isDark: isDark,
+            ),
+          const SizedBox(height: 10),
+
+          if (riskData?['bpm_score'] != null)
+            _IndicatorCard(
+              icon: Icons.favorite_rounded,
+              label: 'Detak Jantung',
+              value: '${riskData!['bpm_score']}',
+              detail: 'Rata-rata BPM minggu ini',
+              color: _getScoreColor(riskData!['bpm_score']),
+              isDark: isDark,
+            ),
+          const SizedBox(height: 10),
+
+          if (riskData?['activity_score'] != null)
+            _IndicatorCard(
+              icon: Icons.directions_walk_rounded,
+              label: 'Aktivitas Fisik',
+              value: '${riskData!['activity_score']}',
+              detail: 'Rata-rata langkah per hari',
+              color: _getScoreColor(riskData!['activity_score']),
+              isDark: isDark,
+            ),
+          const SizedBox(height: 24),
+
+          // Rekomendasi dari AI
+          // Ganti bagian rekomendasi
+          if (riskData?['recommendation'] != null) ...[
+            _SectionLabel(label: 'Rekomendasi AI', isDark: isDark),
+            const SizedBox(height: 12),
+            Container(
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.darkCard : AppColors.lightCard,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Column(
+                children: () {
+                  final recommendations = riskData!['recommendation'] as List;
+                  return recommendations.asMap().entries.map((e) {
+                    final i = e.key;
+                    final r = e.value as Map<String, dynamic>;
+                    final isLast = i == recommendations.length - 1;
+                    final isHigh = r['priority'] == 'high';
+
+                    return Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: isHigh
+                                      ? AppColors.danger.withOpacity(0.12)
+                                      : AppColors.warning.withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Icon(
+                                  isHigh
+                                      ? Icons.priority_high_rounded
+                                      : Icons.info_outline_rounded,
+                                  color: isHigh
+                                      ? AppColors.danger
+                                      : AppColors.warning,
+                                  size: 18,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: isHigh
+                                            ? AppColors.danger.withOpacity(0.1)
+                                            : AppColors.warning
+                                                .withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        isHigh
+                                            ? 'Prioritas Tinggi'
+                                            : 'Prioritas Sedang',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                          color: isHigh
+                                              ? AppColors.danger
+                                              : AppColors.warning,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      r['action'] ?? '',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        height: 1.5,
+                                        fontWeight: FontWeight.w500,
+                                        color: isDark
+                                            ? AppColors.darkText
+                                            : AppColors.lightText,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (!isLast)
+                          Divider(
+                            height: 1,
+                            indent: 16,
+                            color: isDark
+                                ? AppColors.darkDivider
+                                : AppColors.lightDivider,
+                          ),
+                      ],
+                    );
+                  }).toList();
+                }(),
+              ),
+            ),
+            const SizedBox(height: 20),
+          ],
+
+          // Tombol analisis ulang
+          GradientButton(
+            text: 'Analisis Ulang',
+            onPressed: onAnalyze,
+          ),
+          const SizedBox(height: 12),
+
+          // Terakhir dianalisis
+          if (riskData?['predicted_at'] != null)
+            Center(
+              child: Text(
+                'Terakhir dianalisis: ${_formatDate(riskData!['predicted_at'])}',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isDark
+                      ? AppColors.darkTextSecondary
+                      : AppColors.lightTextSecondary,
+                ),
+              ),
+            ),
           const SizedBox(height: 8),
         ],
       ),
     );
+  }
+
+  Color _getScoreColor(dynamic score) {
+    final s = (score as num).toDouble();
+    if (s >= 70) return AppColors.success;
+    if (s >= 40) return AppColors.warning;
+    return AppColors.danger;
+  }
+
+  String _formatDate(String dateStr) {
+    try {
+      final date = DateTime.parse(dateStr);
+      return '${date.day}/${date.month}/${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    } catch (e) {
+      return dateStr;
+    }
   }
 }
 
@@ -385,8 +567,13 @@ class _RiskAnalysisTab extends StatelessWidget {
 class _RiskLevelCard extends StatelessWidget {
   final String riskLevel;
   final bool isDark;
+  final String? summary;
 
-  const _RiskLevelCard({required this.riskLevel, required this.isDark});
+  const _RiskLevelCard({
+    required this.riskLevel,
+    required this.isDark,
+    this.summary, // tambah ini
+  });
 
   Color get _color {
     switch (riskLevel) {
@@ -456,7 +643,7 @@ class _RiskLevelCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            _description,
+            summary ?? _description,
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 13,
@@ -597,148 +784,6 @@ class _IndicatorCard extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ─── Recommendation Card ───────────────────────────────────────────────────
-class _RecommendationCard extends StatelessWidget {
-  final String riskLevel;
-  final bool isDark;
-
-  const _RecommendationCard({
-    required this.riskLevel,
-    required this.isDark,
-  });
-
-  List<Map<String, dynamic>> get _recommendations {
-    switch (riskLevel) {
-      case 'high':
-        return [
-          {
-            'icon': Icons.local_hospital_outlined,
-            'text': 'Segera konsultasi dengan dokter atau psikiater',
-            'color': AppColors.danger
-          },
-          {
-            'icon': Icons.phone_outlined,
-            'text': 'Hubungi bidan pendamping secepatnya',
-            'color': AppColors.danger
-          },
-          {
-            'icon': Icons.people_outline_rounded,
-            'text': 'Minta dukungan dari keluarga terdekat',
-            'color': AppColors.warning
-          },
-          {
-            'icon': Icons.self_improvement_rounded,
-            'text': 'Hindari sendirian, selalu ada pendamping',
-            'color': AppColors.warning
-          },
-        ];
-      case 'moderate':
-        return [
-          {
-            'icon': Icons.calendar_today_outlined,
-            'text': 'Jadwalkan konsultasi dengan bidan dalam 3 hari',
-            'color': AppColors.warning
-          },
-          {
-            'icon': Icons.bedtime_rounded,
-            'text': 'Tingkatkan kualitas tidur minimal 7 jam/malam',
-            'color': AppColors.primary
-          },
-          {
-            'icon': Icons.mood_rounded,
-            'text': 'Isi mood tracker setiap hari untuk pemantauan',
-            'color': AppColors.primary
-          },
-          {
-            'icon': Icons.directions_walk_rounded,
-            'text': 'Lakukan aktivitas ringan 30 menit setiap hari',
-            'color': AppColors.success
-          },
-        ];
-      default:
-        return [
-          {
-            'icon': Icons.check_circle_outline_rounded,
-            'text': 'Pertahankan pola hidup sehat saat ini',
-            'color': AppColors.success
-          },
-          {
-            'icon': Icons.assignment_outlined,
-            'text': 'Isi kuesioner EPDS rutin setiap minggu',
-            'color': AppColors.primary
-          },
-          {
-            'icon': Icons.bedtime_rounded,
-            'text': 'Jaga kualitas tidur tetap optimal',
-            'color': AppColors.primary
-          },
-          {
-            'icon': Icons.favorite_outlined,
-            'text': 'Tetap aktif dan jaga kesehatan mental',
-            'color': AppColors.success
-          },
-        ];
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkCard : AppColors.lightCard,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Column(
-        children: _recommendations.asMap().entries.map((e) {
-          final i = e.key;
-          final r = e.value;
-          final isLast = i == _recommendations.length - 1;
-          return Column(
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: (r['color'] as Color).withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(r['icon'] as IconData,
-                        color: r['color'] as Color, size: 18),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      r['text'] as String,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        height: 1.4,
-                        color:
-                            isDark ? AppColors.darkText : AppColors.lightText,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              if (!isLast) ...[
-                const SizedBox(height: 12),
-                Divider(
-                  height: 1,
-                  color:
-                      isDark ? AppColors.darkDivider : AppColors.lightDivider,
-                ),
-                const SizedBox(height: 12),
-              ],
-            ],
-          );
-        }).toList(),
       ),
     );
   }

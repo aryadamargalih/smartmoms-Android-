@@ -4,6 +4,7 @@ import '../../core/widgets/common_widgets.dart';
 import 'questionnaire_model.dart';
 import 'package:provider/provider.dart';
 import '../../core/providers/questionnaire_provider.dart' as qp;
+import 'csq_screen.dart';
 
 class QuestionnaireScreen extends StatefulWidget {
   const QuestionnaireScreen({super.key});
@@ -24,42 +25,6 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
   String _page = 'list';
 
   qp.QuestionnaireResult? _result;
-
-  QuestionnaireModel get _currentQuestionnaire =>
-      dummyQuestionnaires[_activeQuestionnaire];
-
-  QuestionModel get _question =>
-      _currentQuestionnaire.questions[_currentQuestion];
-
-  int get _totalQuestions => _currentQuestionnaire.questions.length;
-
-  double get _progress => (_currentQuestion + 1) / _totalQuestions;
-
-  int get _totalScore {
-    int score = 0;
-    for (final q in _currentQuestionnaire.questions) {
-      score += _answers[q.id] ?? 0;
-    }
-    return score;
-  }
-
-  int get _maxScore => _totalQuestions * 5;
-
-  String get _scoreCategory {
-    final percent = _totalScore / _maxScore;
-    if (percent >= 0.8) return 'Sangat Baik';
-    if (percent >= 0.6) return 'Baik';
-    if (percent >= 0.4) return 'Cukup';
-    return 'Perlu Perhatian';
-  }
-
-  Color get _scoreColor {
-    final percent = _totalScore / _maxScore;
-    if (percent >= 0.8) return AppColors.success;
-    if (percent >= 0.6) return AppColors.primary;
-    if (percent >= 0.4) return AppColors.warning;
-    return AppColors.danger;
-  }
 
   void _startQuestionnaire(int index, int questionnaireId) async {
     setState(() {
@@ -225,7 +190,25 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
                         questions: [], // kosong dulu, diload saat tap
                       ),
                       isDark: isDark,
-                      onTap: () => _startQuestionnaire(i, q.id),
+                      onTap: () {
+                        final q = provider.questionnaires[i];
+
+                        // Cek apakah CSQ-8 berdasarkan category atau title
+                        if (q.category == 'csq' ||
+                            q.title.toLowerCase().contains('csq')) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => CsqScreen(
+                                questionnaireId: q.id,
+                                title: q.title,
+                              ),
+                            ),
+                          );
+                        } else {
+                          _startQuestionnaire(i, q.id);
+                        }
+                      },
                     );
                   }),
                 ],
@@ -642,24 +625,6 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
         ),
       ),
     );
-  }
-
-  Color _getAnswerColor(int value) {
-    if (value >= 4) return AppColors.success;
-    if (value == 3) return AppColors.warning;
-    return AppColors.danger;
-  }
-
-  String _getRecommendation() {
-    final percent = _totalScore / _maxScore;
-    if (percent >= 0.8) {
-      return 'Luar biasa! Kondisi kesehatanmu sangat baik. Pertahankan pola hidup sehat ini dan tetap rutin periksa ke dokter/bidan ya!';
-    } else if (percent >= 0.6) {
-      return 'Kondisi kesehatanmu sudah cukup baik. Ada beberapa aspek yang masih bisa ditingkatkan. Coba konsultasikan dengan AI untuk saran lebih lanjut.';
-    } else if (percent >= 0.4) {
-      return 'Ada beberapa hal yang perlu perhatian lebih. Disarankan untuk berkonsultasi dengan dokter/bidan dan tingkatkan pola hidup sehatmu.';
-    }
-    return 'Kondisi kesehatanmu memerlukan perhatian serius. Segera konsultasikan dengan tenaga medis dan gunakan fitur AI Chat untuk mendapat panduan lebih lanjut.';
   }
 }
 

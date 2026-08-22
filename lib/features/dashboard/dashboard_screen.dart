@@ -26,69 +26,45 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _activityPeriod = 0;
   bool _moodReminderShown = false;
 
-  final List<List<FlSpot>> _bpmData = [
-    [
-      FlSpot(0, 78),
-      FlSpot(1, 82),
-      FlSpot(2, 76),
-      FlSpot(3, 88),
-      FlSpot(4, 84),
-      FlSpot(5, 79),
-      FlSpot(6, 85)
-    ],
-    [
-      FlSpot(0, 80),
-      FlSpot(1, 78),
-      FlSpot(2, 84),
-      FlSpot(3, 82),
-      FlSpot(4, 77),
-      FlSpot(5, 86),
-      FlSpot(6, 83),
-      FlSpot(7, 79)
-    ],
-    [FlSpot(0, 82), FlSpot(1, 79), FlSpot(2, 84), FlSpot(3, 81)],
-  ];
-
   // getter BPM
   List<FlSpot> get _bpmSpots {
-    final data = context.read<HealthProvider>().chartData;
-    if (data.isEmpty) return _bpmData[_bpmPeriod]; // fallback dummy
+    final data = context.read<HealthProvider>().bpmChartData;
     return data
+        .where((e) => e.bpm != null)
+        .toList()
         .asMap()
         .entries
-        .where((e) => e.value.bpm != null)
         .map((e) => FlSpot(e.key.toDouble(), e.value.bpm!.toDouble()))
         .toList();
   }
 
   // getter TD Sistolik
   List<FlSpot> get _systolicSpots {
-    final data = context.read<HealthProvider>().chartData;
-    if (data.isEmpty) return _bpSystolicData[_bpPeriod];
+    final data = context.read<HealthProvider>().bpChartData;
     return data
+        .where((e) => e.systolic != null)
+        .toList()
         .asMap()
         .entries
-        .where((e) => e.value.systolic != null)
         .map((e) => FlSpot(e.key.toDouble(), e.value.systolic!.toDouble()))
         .toList();
   }
 
-// getter TD Diastolik
+  // getter TD Diastolik
   List<FlSpot> get _diastolicSpots {
-    final data = context.read<HealthProvider>().chartData;
-    if (data.isEmpty) return _bpDiastolicData[_bpPeriod];
+    final data = context.read<HealthProvider>().bpChartData;
     return data
+        .where((e) => e.diastolic != null)
+        .toList()
         .asMap()
         .entries
-        .where((e) => e.value.diastolic != null)
         .map((e) => FlSpot(e.key.toDouble(), e.value.diastolic!.toDouble()))
         .toList();
   }
 
-// getter Aktivitas
+  // getter Aktivitas
   List<BarChartGroupData> get _activitySpots {
-    final data = context.read<HealthProvider>().chartData;
-    if (data.isEmpty) return _activityData[_activityPeriod];
+    final data = context.read<HealthProvider>().activityChartData;
     return data.asMap().entries.map((e) {
       return BarChartGroupData(
         x: e.key,
@@ -108,60 +84,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }).toList();
   }
 
-  // Dummy data Blood Pressure (Systolic & Diastolic)
-  final List<List<FlSpot>> _bpSystolicData = [
-    [
-      FlSpot(0, 118),
-      FlSpot(1, 122),
-      FlSpot(2, 116),
-      FlSpot(3, 124),
-      FlSpot(4, 119),
-      FlSpot(5, 121),
-      FlSpot(6, 117)
-    ],
-    [
-      FlSpot(0, 120),
-      FlSpot(1, 115),
-      FlSpot(2, 122),
-      FlSpot(3, 118),
-      FlSpot(4, 123),
-      FlSpot(5, 119),
-      FlSpot(6, 121),
-      FlSpot(7, 116)
-    ],
-    [FlSpot(0, 119), FlSpot(1, 121), FlSpot(2, 118), FlSpot(3, 122)],
-  ];
-
-  final List<List<FlSpot>> _bpDiastolicData = [
-    [
-      FlSpot(0, 76),
-      FlSpot(1, 80),
-      FlSpot(2, 74),
-      FlSpot(3, 78),
-      FlSpot(4, 75),
-      FlSpot(5, 79),
-      FlSpot(6, 77)
-    ],
-    [
-      FlSpot(0, 77),
-      FlSpot(1, 73),
-      FlSpot(2, 79),
-      FlSpot(3, 75),
-      FlSpot(4, 80),
-      FlSpot(5, 76),
-      FlSpot(6, 78),
-      FlSpot(7, 74)
-    ],
-    [FlSpot(0, 76), FlSpot(1, 78), FlSpot(2, 75), FlSpot(3, 77)],
-  ];
-
-  // Dummy data Activity (steps per day)
-  final List<List<BarChartGroupData>> _activityData = [];
-
   @override
   void initState() {
     super.initState();
-    _buildActivityData();
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       context.read<HealthProvider>().refreshAll();
@@ -212,42 +137,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  void _buildActivityData() {
-    final colors = [
-      [AppColors.activityColor, AppColors.activityColorLight],
-      [AppColors.activityColor, AppColors.activityColorLight],
-      [AppColors.activityColor, AppColors.activityColorLight],
-    ];
-    final rawData = [
-      [3200.0, 5400.0, 4100.0, 6700.0, 3800.0, 7200.0, 5900.0],
-      [4500.0, 3800.0, 5200.0, 6100.0, 4900.0, 5800.0, 4200.0, 6300.0],
-      [5100.0, 4800.0, 5500.0, 6200.0],
-    ];
-
-    for (int p = 0; p < 3; p++) {
-      _activityData.add(
-        List.generate(rawData[p].length, (i) {
-          return BarChartGroupData(
-            x: i,
-            barRods: [
-              BarChartRodData(
-                toY: rawData[p][i],
-                gradient: LinearGradient(
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                  colors: [colors[p][0], colors[p][1]],
-                ),
-                width: 14,
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(6)),
-              ),
-            ],
-          );
-        }),
-      );
-    }
-  }
-
   void _showSleepInput(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -255,12 +144,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
       backgroundColor: Colors.transparent,
       builder: (_) => _SleepInputSheet(
         onSave: (bed, wake, quality, disturbances) async {
-          await context.read<SleepProvider>().submitSleep(
+          final ok = await context.read<SleepProvider>().submitSleep(
                 bedTime: bed,
                 wakeTime: wake,
                 quality: quality,
                 disturbances: disturbances,
               );
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(ok
+                  ? 'Data tidur berhasil disimpan'
+                  : context.read<SleepProvider>().errorMessage ??
+                      'Gagal menyimpan data tidur'),
+              backgroundColor: ok ? AppColors.success : AppColors.danger,
+            ),
+          );
         },
       ),
     );
@@ -479,15 +378,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       periods: periods,
                       onPeriodChanged: (i) {
                         setState(() => _bpmPeriod = i);
-                        final periods = ['day', 'week', 'month'];
+                        final p = ['day', 'week', 'month'];
                         context
                             .read<HealthProvider>()
-                            .fetchChartData(period: periods[i]);
+                            .fetchBpmChartData(period: p[i]);
                       },
-                      chart: _BpmLineChart(
-                        spots: _bpmSpots,
-                        isDark: isDark,
-                      ),
+                      chart: _bpmSpots.isEmpty
+                          ? _EmptyChart(isDark: isDark)
+                          : _BpmLineChart(spots: _bpmSpots, isDark: isDark),
                     ),
                     const SizedBox(height: 20),
 
@@ -501,17 +399,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       periods: periods,
                       onPeriodChanged: (i) {
                         setState(() => _bpPeriod = i);
-                        final periods = ['day', 'week', 'month'];
+                        final p = ['day', 'week', 'month'];
                         context
                             .read<HealthProvider>()
-                            .fetchChartData(period: periods[i]);
+                            .fetchBpChartData(period: p[i]);
                       },
-                      chart: _BloodPressureLineChart(
-                        systolicSpots: _systolicSpots,
-                        diastolicSpots: _diastolicSpots,
-                        isDark: isDark,
-                      ),
-                      legend: const _BpLegend(),
+                      chart: _systolicSpots.isEmpty
+                          ? _EmptyChart(isDark: isDark)
+                          : _BloodPressureLineChart(
+                              systolicSpots: _systolicSpots,
+                              diastolicSpots: _diastolicSpots,
+                              isDark: isDark,
+                            ),
+                      legend: _systolicSpots.isEmpty ? null : const _BpLegend(),
                     ),
                     const SizedBox(height: 20),
 
@@ -525,15 +425,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       periods: periods,
                       onPeriodChanged: (i) {
                         setState(() => _activityPeriod = i);
-                        final periods = ['day', 'week', 'month'];
+                        final p = ['day', 'week', 'month'];
                         context
                             .read<HealthProvider>()
-                            .fetchChartData(period: periods[i]);
+                            .fetchActivityChartData(period: p[i]);
                       },
-                      chart: _ActivityBarChart(
-                        groups: _activitySpots,
-                        isDark: isDark,
-                      ),
+                      chart: _activitySpots.isEmpty
+                          ? _EmptyChart(isDark: isDark)
+                          : _ActivityBarChart(
+                              groups: _activitySpots, isDark: isDark),
                     ),
                     const SizedBox(height: 20),
 
@@ -801,11 +701,15 @@ class _ChartCard extends StatelessWidget {
                   children: [
                     Text(
                       title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                           fontSize: 15, fontWeight: FontWeight.w700),
                     ),
                     Text(
                       subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 12,
                         color: isDark
@@ -816,12 +720,16 @@ class _ChartCard extends StatelessWidget {
                   ],
                 ),
               ),
-              PeriodSelector(
-                periods: periods,
-                selected: period,
-                onChanged: onPeriodChanged,
-              ),
             ],
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerRight,
+            child: PeriodSelector(
+              periods: periods,
+              selected: period,
+              onChanged: onPeriodChanged,
+            ),
           ),
           if (legend != null) ...[
             const SizedBox(height: 12),
@@ -1378,7 +1286,10 @@ class _SleepCard extends StatelessWidget {
                   : Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 6,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             Text(
                               sleep!.durationText,
@@ -1390,7 +1301,6 @@ class _SleepCard extends StatelessWidget {
                                     : AppColors.lightText,
                               ),
                             ),
-                            const SizedBox(width: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 8, vertical: 3),
@@ -1408,9 +1318,9 @@ class _SleepCard extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            if (sleep!.quality != null) ...[
-                              const SizedBox(height: 4),
+                            if (sleep!.quality != null)
                               Row(
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(sleep!.quality!.emoji,
                                       style: const TextStyle(fontSize: 14)),
@@ -1421,31 +1331,27 @@ class _SleepCard extends StatelessWidget {
                                         color: sleep!.quality!.color,
                                         fontWeight: FontWeight.w600,
                                       )),
-                                  if (sleep!.disturbances.isNotEmpty &&
-                                      sleep!.disturbances.first !=
-                                          SleepDisturbance.none) ...[
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color:
-                                            AppColors.danger.withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Text(
-                                        '${sleep!.disturbances.where((d) => d != SleepDisturbance.none).length} gangguan',
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          color: AppColors.danger,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
                                 ],
                               ),
-                            ],
+                            if (sleep!.disturbances.isNotEmpty &&
+                                sleep!.disturbances.first !=
+                                    SleepDisturbance.none)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppColors.danger.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  '${sleep!.disturbances.where((d) => d != SleepDisturbance.none).length} gangguan',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.danger,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                         Text(
@@ -1814,7 +1720,16 @@ class _SleepInputSheetState extends State<_SleepInputSheet> {
                   ],
                 ),
                 child: ElevatedButton(
-                  onPressed: () {
+                  onPressed: () async {
+                    if (_selectedQuality == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Pilih kualitas tidur dulu ya'),
+                          backgroundColor: AppColors.danger,
+                        ),
+                      );
+                      return;
+                    }
                     var bed = _toDateTime(_bedTime);
                     var wake = _toDateTime(_wakeTime);
                     if (wake.isBefore(bed)) {
@@ -1992,7 +1907,10 @@ class _MoodCard extends StatelessWidget {
                   : Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 6,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             Text(
                               mood!.mood.label,
@@ -2002,7 +1920,6 @@ class _MoodCard extends StatelessWidget {
                                 color: mood!.mood.color,
                               ),
                             ),
-                            const SizedBox(width: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 8, vertical: 2),
@@ -2363,6 +2280,39 @@ class _MoodInputSheetState extends State<_MoodInputSheet> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _EmptyChart extends StatelessWidget {
+  final bool isDark;
+  const _EmptyChart({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.bar_chart_outlined,
+            size: 36,
+            color: isDark
+                ? AppColors.darkTextSecondary
+                : AppColors.lightTextSecondary,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Belum ada data',
+            style: TextStyle(
+              fontSize: 13,
+              color: isDark
+                  ? AppColors.darkTextSecondary
+                  : AppColors.lightTextSecondary,
+            ),
+          ),
+        ],
       ),
     );
   }

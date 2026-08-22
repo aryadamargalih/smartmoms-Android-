@@ -109,7 +109,9 @@ class _AppTextFieldState extends State<AppTextField> {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w500,
-            color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+            color: isDark
+                ? AppColors.darkTextSecondary
+                : AppColors.lightTextSecondary,
           ),
         ),
         const SizedBox(height: 6),
@@ -130,9 +132,13 @@ class _AppTextFieldState extends State<AppTextField> {
             suffixIcon: widget.isPassword
                 ? IconButton(
                     icon: Icon(
-                      _obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                      _obscure
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
                       size: 20,
-                      color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                      color: isDark
+                          ? AppColors.darkTextSecondary
+                          : AppColors.lightTextSecondary,
                     ),
                     onPressed: () => setState(() => _obscure = !_obscure),
                   )
@@ -201,7 +207,8 @@ class StatCard extends StatelessWidget {
               ),
               if (status != null)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: AppColors.success.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(20),
@@ -235,7 +242,9 @@ class StatCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
-                    color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                    color: isDark
+                        ? AppColors.darkTextSecondary
+                        : AppColors.lightTextSecondary,
                     fontFamily: 'Poppins',
                   ),
                 ),
@@ -247,7 +256,9 @@ class StatCard extends StatelessWidget {
             title,
             style: TextStyle(
               fontSize: 13,
-              color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+              color: isDark
+                  ? AppColors.darkTextSecondary
+                  : AppColors.lightTextSecondary,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -330,7 +341,7 @@ class PeriodSelector extends StatelessWidget {
             onTap: () => onChanged(i),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 color: isSelected ? AppColors.primary : Colors.transparent,
                 borderRadius: BorderRadius.circular(8),
@@ -342,7 +353,9 @@ class PeriodSelector extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                   color: isSelected
                       ? Colors.white
-                      : (isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary),
+                      : (isDark
+                          ? AppColors.darkTextSecondary
+                          : AppColors.lightTextSecondary),
                 ),
               ),
             ),

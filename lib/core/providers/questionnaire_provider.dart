@@ -119,7 +119,7 @@ class QuestionnaireResult {
 
     return QuestionnaireResult(
       id: json['id'],
-      questionnaireId: json['questionnaire_id'],
+      questionnaireId: json['questionnaire_id'] ?? json['questionnaire']?['id'],
       questionnaireTitle: json['questionnaire']?['title'] ?? '',
       totalScore: json['total_score'],
       maxScore: json['max_score'],
@@ -189,16 +189,33 @@ class QuestionnaireProvider extends ChangeNotifier {
 
     final response = await ApiService.post(
       '/questionnaires/$questionnaireId/submit',
-      body: {'answers': answers},
+      body: {
+        'answers': answers.entries
+            .map((e) => {
+                  'question_id': int.parse(e.key),
+                  'value': e.value,
+                })
+            .toList(),
+      },
     );
 
     _isSubmitting = false;
 
     if (response['success'] == true) {
-      final result = QuestionnaireResult.fromJson(response['data']);
-      notifyListeners();
-      return result;
+      try {
+        final result = QuestionnaireResult.fromJson(response['data']);
+        notifyListeners();
+        return result;
+      } catch (e) {
+        print('[Questionnaire] parse error: $e, data: ${response['data']}');
+        _errorMessage = 'Gagal memproses hasil kuesioner';
+        notifyListeners();
+        return null;
+      }
     }
+    print('[Questionnaire] submit failed: ${response['message']}, '
+        'errors: ${response['errors']}');
+    _errorMessage = response['message'];
     notifyListeners();
     return null;
   }

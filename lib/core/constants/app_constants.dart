@@ -7,6 +7,7 @@ class AppRoutes {
   static const String aiChat = '/ai-chat';
   static const String questionnaire = '/questionnaire';
   static const String education = '/education';
+  static const String video = '/video';
 }
 
 class AppAssets {
