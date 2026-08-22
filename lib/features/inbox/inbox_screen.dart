@@ -267,15 +267,6 @@ class _MessageCard extends StatelessWidget {
       ),
     );
   }
-
-  String _formatTime(DateTime time) {
-    final now = DateTime.now();
-    final diff = now.difference(time);
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}j ago';
-    if (diff.inDays < 7) return '${diff.inDays}h ago';
-    return '${time.day}/${time.month}/${time.year}';
-  }
 }
 
 // ─── Message Detail Bottom Sheet ───────────────────────────────────────────
@@ -481,27 +472,4 @@ class _EmptyInbox extends StatelessWidget {
       ),
     );
   }
-}
-
-// ─── Model ─────────────────────────────────────────────────────────────────
-class _InboxMessage {
-  final String id;
-  final String senderName;
-  final String senderRole;
-  final String subject;
-  final String message;
-  final DateTime time;
-  bool isRead;
-  final String type; // 'doctor' atau 'admin'
-
-  _InboxMessage({
-    required this.id,
-    required this.senderName,
-    required this.senderRole,
-    required this.subject,
-    required this.message,
-    required this.time,
-    required this.isRead,
-    required this.type,
-  });
 }

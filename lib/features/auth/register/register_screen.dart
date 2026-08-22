@@ -22,7 +22,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _deliveryDateController = TextEditingController();
   DateTime? _selectedDeliveryDate;
 
-  bool _isLoading = false;
   int _currentStep = 0; // 0: personal info, 1: account info
 
   @override

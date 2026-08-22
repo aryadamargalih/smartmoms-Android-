@@ -14,9 +14,6 @@ class QuestionnaireScreen extends StatefulWidget {
 }
 
 class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
-  // Index kuesioner yang sedang aktif
-  int _activeQuestionnaire = 0;
-
   // Index pertanyaan yang sedang aktif
   int _currentQuestion = 0;
   // Simpan jawaban: {questionId: value}
@@ -28,7 +25,6 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
 
   void _startQuestionnaire(int index, int questionnaireId) async {
     setState(() {
-      _activeQuestionnaire = index;
       _currentQuestion = 0;
       _answers.clear();
       _page = 'loading';
